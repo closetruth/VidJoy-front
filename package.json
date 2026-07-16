@@ -1,0 +1,15 @@
+{
+  "name": "vidjoy-front",
+  "private": true,
+  "version": "1.0.0",
+  "scripts": {
+    "dev": "npm run dev --prefix web",
+    "dev:web": "npm run dev --prefix web",
+    "dev:admin": "npm run dev --prefix admin",
+    "build": "npm run build --prefix web",
+    "build:web": "npm run build --prefix web",
+    "build:admin": "npm run build --prefix admin",
+    "preview:web": "npm run preview --prefix web",
+    "preview:admin": "npm run preview --prefix admin"
+  }
+}
