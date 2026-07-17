@@ -38,22 +38,30 @@
           <span>分片数</span>
           <strong>{{ chunksTotal }}</strong>
         </div>
-        <p class="result-tip">
-          当前前端已按后端真实实现接入 `POST /file/preUploadVideo` 和 `POST /file/uploadVideo`。
-        </p>
+        <div class="result-actions">
+          <button
+            type="button"
+            class="btn-outline delete-btn"
+            :disabled="deleting"
+            @click="deleteUploaded"
+          >
+            {{ deleting ? '删除中...' : '删除上传' }}
+          </button>
+        </div>
       </div>
     </div>
   </div>
 </template>
 
 <script setup>
-import { computed, ref } from 'vue'
+import { ref } from 'vue'
 import { fileApi } from '@/api'
 
 const fileInput = ref(null)
 
 const uploading = ref(false)
 const uploadComplete = ref(false)
+const deleting = ref(false)
 
 const uploadingChunkIndex = ref(0)
 const chunksTotal = ref(1)
@@ -66,8 +74,19 @@ const uploadedFileName = ref('')
 // 后端 max-request 15MB、视频 max-file-size 10MB；这里用 1MB 分片
 const VIDEO_CHUNK_SIZE = 1 * 1024 * 1024
 
+function resetUploadState() {
+  uploadId.value = ''
+  uploadedFileName.value = ''
+  uploadComplete.value = false
+  uploadingChunkIndex.value = 0
+  chunksTotal.value = 1
+  progress.value = 0
+  errorMsg.value = ''
+  if (fileInput.value) fileInput.value.value = ''
+}
+
 function triggerUpload() {
-  if (uploading.value) return
+  if (uploading.value || deleting.value) return
   fileInput.value?.click()
 }
 
@@ -77,6 +96,7 @@ function onFileSelect(e) {
 }
 
 function onDrop(e) {
+  if (uploading.value || deleting.value) return
   const file = e.dataTransfer.files?.[0]
   if (file) handleFile(file)
 }
@@ -127,6 +147,21 @@ async function handleFile(file) {
     errorMsg.value = e?.message || String(e)
   } finally {
     uploading.value = false
+  }
+}
+
+async function deleteUploaded() {
+  if (!uploadId.value || deleting.value) return
+
+  errorMsg.value = ''
+  deleting.value = true
+  try {
+    await fileApi.delUploadVideo(uploadId.value, Math.max(0, chunksTotal.value - 1))
+    resetUploadState()
+  } catch (e) {
+    errorMsg.value = e?.message || String(e)
+  } finally {
+    deleting.value = false
   }
 }
 </script>
@@ -252,9 +287,22 @@ async function handleFile(file) {
   }
 }
 
-.result-tip {
-  margin-top: 16px;
-  font-size: 13px;
-  color: var(--bili-text-tertiary);
+.result-actions {
+  margin-top: 20px;
+}
+
+.delete-btn {
+  color: #f53f3f;
+  border-color: rgba(245, 63, 63, 0.35);
+
+  &:hover:not(:disabled) {
+    background: rgba(245, 63, 63, 0.06);
+    border-color: #f53f3f;
+  }
+
+  &:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
 }
 </style>

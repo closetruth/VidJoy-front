@@ -17,6 +17,7 @@ export const videoApi = {
   loadRecommendVideo: () => request.post('/video/loadRecommendVideo'),
   loadVideo: (data) => request.post('/video/loadVideo', data),
   getVideoInfo: (videoId) => request.post('/video/getVideoInfo', null, { params: { videoId } }),
+  // 获取视频分P：返回 VideoInfoFile 列表（fileId / fileName / fileIndex / duration）
   loadVideoPList: (videoId) => request.post('/video/loadVideoPList', null, { params: { videoId } }),
   search: (data) => request.post('/video/search', data),
   getSearchKeywordTop: () => request.post('/video/getSearchKeywordTop'),
@@ -85,5 +86,10 @@ export const fileApi = {
     data.append('chunkIndex', String(chunkIndex))
     data.append('chunkFile', chunkFile)
     return request.post('/file/uploadVideo', data, config)
-  }
+  },
+  // 删除本次已上传视频（清 Redis + 临时目录）
+  delUploadVideo: (uploadId, chunkIndex) =>
+    request.delete('/file/delUploadVideo', {
+      params: { uploadId, chunkIndex }
+    })
 }

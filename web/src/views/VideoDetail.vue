@@ -20,7 +20,9 @@
               :class="{ active: currentFileId === ep.fileId }"
               @click="switchEpisode(ep)"
             >
-              P{{ index + 1 }} {{ ep.fileName }}
+              <span class="ep-label">P{{ ep.fileIndex ?? index + 1 }}</span>
+              <span class="ep-name">{{ ep.fileName || `分P${index + 1}` }}</span>
+              <span v-if="ep.duration" class="ep-duration">{{ formatDuration(ep.duration) }}</span>
             </button>
           </div>
 
@@ -125,7 +127,7 @@ import CommentSection from '@/components/video/CommentSection.vue'
 import LoginDialog from '@/components/auth/LoginDialog.vue'
 import { useUserStore } from '@/stores'
 import { videoApi, danmuApi, userActionApi, uhomeApi } from '@/api'
-import { formatCount, formatTime, getResourceUrl } from '@/utils/format'
+import { formatCount, formatTime, formatDuration, getResourceUrl } from '@/utils/format'
 
 const route = useRoute()
 const userStore = useUserStore()
@@ -148,23 +150,45 @@ const videoSrc = computed(() => {
   return `/api/file/videoResource/${currentFileId.value}`
 })
 
+function normalizeEpisodeList(data) {
+  const list = Array.isArray(data) ? data : data?.list || []
+  return [...list].sort((a, b) => {
+    const ai = Number(a.fileIndex ?? 0)
+    const bi = Number(b.fileIndex ?? 0)
+    return ai - bi
+  })
+}
+
+/** 获取视频分P列表，默认选中第一P */
+async function loadVideoPList() {
+  const epRes = await videoApi.loadVideoPList(videoId.value)
+  episodes.value = normalizeEpisodeList(epRes.data ?? epRes)
+  if (episodes.value.length) {
+    currentFileId.value = episodes.value[0].fileId
+    await loadDanmu()
+  } else {
+    currentFileId.value = ''
+    danmuList.value = []
+  }
+}
+
 async function loadVideo() {
   loading.value = true
+  episodes.value = []
+  currentFileId.value = ''
+  danmuList.value = []
   try {
     const res = await videoApi.getVideoInfo(videoId.value)
     videoInfo.value = res.data
 
-    const epRes = await videoApi.loadVideoPList(videoId.value)
-    episodes.value = epRes.data || []
-    if (episodes.value.length) {
-      currentFileId.value = episodes.value[0].fileId
-      loadDanmu()
-    }
+    await loadVideoPList()
 
     const recRes = await videoApi.getVideoRecommend(videoId.value)
     recommendList.value = recRes.data || []
   } catch {
     videoInfo.value = null
+    episodes.value = []
+    currentFileId.value = ''
   } finally {
     loading.value = false
   }
@@ -184,6 +208,7 @@ async function loadDanmu() {
 }
 
 function switchEpisode(ep) {
+  if (!ep?.fileId || currentFileId.value === ep.fileId) return
   currentFileId.value = ep.fileId
   loadDanmu()
 }
@@ -276,6 +301,10 @@ onMounted(loadVideo)
 }
 
 .ep-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
   padding: 6px 14px;
   border-radius: 6px;
   font-size: 13px;
@@ -290,7 +319,28 @@ onMounted(loadVideo)
   &.active {
     background: var(--bili-pink);
     color: #fff;
+
+    .ep-duration {
+      color: rgba(255, 255, 255, 0.85);
+    }
   }
+}
+
+.ep-label {
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.ep-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ep-duration {
+  flex-shrink: 0;
+  font-size: 12px;
+  color: var(--bili-text-tertiary);
 }
 
 .video-info-bar {
