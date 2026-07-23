@@ -19,6 +19,8 @@
       />
     </div>
 
+    <div v-if="errorMsg" class="error-msg">{{ errorMsg }}</div>
+
     <div v-if="loading" class="loading-spinner">加载中</div>
     <div v-else-if="videoList.length" class="video-list">
       <div v-for="video in videoList" :key="video.videoId" class="video-item">
@@ -31,6 +33,16 @@
           <p class="meta">
             {{ formatCount(video.playCount) }} 播放 · {{ formatDate(video.createTime) }}
           </p>
+          <div class="actions">
+            <button
+              v-if="canEditVideo(video.status)"
+              type="button"
+              class="edit-btn"
+              @click="goEdit(video.videoId)"
+            >
+              编辑
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -46,11 +58,15 @@
 
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import { ucenterApi } from '@/api'
 import { formatCount, formatDate, getResourceUrl } from '@/utils/format'
 
+const router = useRouter()
+
 const videoList = ref([])
 const loading = ref(false)
+const errorMsg = ref('')
 const pageNo = ref(1)
 const hasMore = ref(true)
 const status = ref('')
@@ -59,16 +75,27 @@ const counts = reactive({})
 
 const statusTabs = [
   { value: '', label: '全部', countKey: 'allCount' },
-  { value: '1', label: '审核中', countKey: 'auditCount' },
-  { value: '2', label: '已通过', countKey: 'passCount' },
-  { value: '3', label: '未通过', countKey: 'failCount' }
+  { value: '2', label: '审核中', countKey: 'auditCount' },
+  { value: '3', label: '已通过', countKey: 'passCount' },
+  { value: '4', label: '未通过', countKey: 'failCount' }
 ]
 
 const STATUS_MAP = {
   0: { label: '转码中', class: 'info' },
-  1: { label: '待审核', class: 'warning' },
-  2: { label: '已通过', class: 'success' },
-  3: { label: '未通过', class: 'danger' }
+  1: { label: '转码失败', class: 'danger' },
+  2: { label: '待审核', class: 'warning' },
+  3: { label: '已通过', class: 'success' },
+  4: { label: '未通过', class: 'danger' }
+}
+
+const EDITABLE_STATUS = new Set([1, 3, 4])
+
+function canEditVideo(status) {
+  return EDITABLE_STATUS.has(Number(status))
+}
+
+function goEdit(videoId) {
+  router.push(`/upload/${videoId}`)
 }
 
 function statusLabel(s) {
@@ -105,11 +132,13 @@ async function loadList(reset = false) {
     data.append('videoNameFuzzy', keyword.value)
 
     const res = await ucenterApi.loadVideoList(data)
-    const list = res.data?.list || res.data || []
+    const list = res.data?.list || []
     videoList.value = reset ? list : [...videoList.value, ...list]
     hasMore.value = list.length >= 20
-  } catch {
+    errorMsg.value = ''
+  } catch (e) {
     if (reset) videoList.value = []
+    errorMsg.value = e?.message || '加载视频列表失败'
   } finally {
     loading.value = false
   }
@@ -229,12 +258,39 @@ onMounted(() => {
   }
 }
 
+.actions {
+  margin-top: 10px;
+}
+
+.edit-btn {
+  padding: 4px 12px;
+  border-radius: 6px;
+  font-size: 13px;
+  color: var(--bili-pink);
+  background: rgba(251, 114, 153, 0.08);
+  border: 1px solid rgba(251, 114, 153, 0.25);
+
+  &:hover {
+    background: rgba(251, 114, 153, 0.14);
+  }
+}
+
 .empty-tip {
   text-align: center;
   padding: 60px;
   color: var(--bili-text-tertiary);
 
   a { color: var(--bili-pink); }
+}
+
+.error-msg {
+  margin-bottom: 16px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: rgba(245, 63, 63, 0.08);
+  border: 1px solid rgba(245, 63, 63, 0.22);
+  color: #f53f3f;
+  font-size: 13px;
 }
 
 .load-more {

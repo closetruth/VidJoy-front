@@ -64,7 +64,13 @@ export const uhomeApi = {
 
 export const ucenterApi = {
   loadVideoList: (data) => request.post('/ucenter/loadVideoList', data),
-  getVideoCountInfo: () => request.post('/ucenter/getVideoCountInfo')
+  getVideoCountInfo: () => request.post('/ucenter/getVideoCountInfo'),
+  getVideoByVideoId: (videoId) => {
+    const data = new FormData()
+    data.append('videoId', videoId)
+    return request.post('/ucenter/getVideoByVideoId', data)
+  },
+  postVideo: (data) => request.post('/ucenter/postVideo', data)
 }
 
 export const sysApi = {
@@ -91,5 +97,12 @@ export const fileApi = {
   delUploadVideo: (uploadId, chunkIndex) =>
     request.delete('/file/delUploadVideo', {
       params: { uploadId, chunkIndex }
-    })
+    }),
+  // 上传封面图，返回 sourceName
+  uploadImage: (file, createThumbnail = true) => {
+    const data = new FormData()
+    data.append('file', file)
+    data.append('createThumbnail', String(createThumbnail))
+    return request.post('/file/uploadImage', data)
+  }
 }

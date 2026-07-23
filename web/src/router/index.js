@@ -52,7 +52,7 @@ const routes = [
     redirect: '/account/message'
   },
   {
-    path: '/upload',
+    path: '/upload/:videoId?',
     name: 'Upload',
     component: () => import('@/views/Upload.vue'),
     meta: authMeta
