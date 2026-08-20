@@ -37,7 +37,10 @@ export const useUserStore = defineStore('user', () => {
 
   /** 进入需登录页面前先尝试 cookie 自动登录 */
   async function ensureAuth() {
-    if (isLoggedIn.value) return true
+    if (isLoggedIn.value) {
+      fetchNoReadCount()
+      return true
+    }
     if (!authPromise) {
       authPromise = autoLogin().finally(() => {
         authPromise = null
@@ -70,10 +73,10 @@ export const useUserStore = defineStore('user', () => {
   }
 
   async function fetchNoReadCount() {
-    if (!isLoggedIn.value) return
     try {
       const res = await messageApi.getNoReadCount()
-      noReadCount.value = res.data || 0
+      const n = Number(res.data?.count ?? res.data ?? 0)
+      noReadCount.value = Number.isFinite(n) ? n : 0
     } catch {
       noReadCount.value = 0
     }

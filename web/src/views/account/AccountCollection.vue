@@ -4,7 +4,7 @@
     <div v-else-if="videoList.length" class="video-grid">
       <VideoCard v-for="video in videoList" :key="video.videoId" :video="video" />
     </div>
-    <div v-else class="empty-tip">暂无收藏视频</div>
+    <div v-else class="empty-tip">暂无收藏视频，去视频页点收藏吧</div>
 
     <div v-if="hasMore && !loading" class="load-more">
       <button class="btn-outline" @click="loadMore">加载更多</button>
@@ -16,11 +16,13 @@
 import { ref, onMounted } from 'vue'
 import VideoCard from '@/components/video/VideoCard.vue'
 import { uhomeApi } from '@/api'
+import { normalizeVideoList } from '@/utils/format'
+import { getCollections } from '@/utils/localInteract'
 
 const videoList = ref([])
 const loading = ref(false)
 const pageNo = ref(1)
-const hasMore = ref(true)
+const hasMore = ref(false)
 
 async function loadList(reset = false) {
   if (loading.value) return
@@ -31,11 +33,13 @@ async function loadList(reset = false) {
     const data = new FormData()
     data.append('pageNo', String(pageNo.value))
     const res = await uhomeApi.loadUserCollection(data)
-    const list = res.data?.list || res.data || []
+    const list = normalizeVideoList(res.data)
     videoList.value = reset ? list : [...videoList.value, ...list]
     hasMore.value = list.length >= 20
+    if (reset && !list.length) videoList.value = getCollections()
   } catch {
-    if (reset) videoList.value = []
+    if (reset) videoList.value = getCollections()
+    hasMore.value = false
   } finally {
     loading.value = false
   }

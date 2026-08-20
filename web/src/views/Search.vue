@@ -25,17 +25,41 @@ import { ref, computed, watch, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import VideoCard from '@/components/video/VideoCard.vue'
 import { videoApi } from '@/api'
+import { normalizeVideoList } from '@/utils/format'
+import { fetchPublicVideoPages } from '@/utils/videoList'
 
 const route = useRoute()
-const keyword = computed(() => route.query.keyword || '')
+const keyword = computed(() => String(route.query.keyword || '').trim())
 const videoList = ref([])
 const loading = ref(false)
 const pageNo = ref(1)
 const totalCount = ref(0)
-const hasMore = ref(true)
+const hasMore = ref(false)
+
+function matchKeyword(video, kw) {
+  const text = [video.videoName, video.nickName, video.tags, video.introduction]
+    .filter(Boolean)
+    .join(' ')
+    .toLowerCase()
+  return text.includes(kw.toLowerCase())
+}
+
+async function searchByLocal() {
+  const all = await fetchPublicVideoPages(8)
+  const matched = all.filter((item) => matchKeyword(item, keyword.value))
+  videoList.value = matched
+  totalCount.value = matched.length
+  hasMore.value = false
+}
 
 async function search(reset = false) {
-  if (!keyword.value || loading.value) return
+  if (!keyword.value) {
+    videoList.value = []
+    totalCount.value = 0
+    hasMore.value = false
+    return
+  }
+  if (loading.value) return
   loading.value = true
   if (reset) pageNo.value = 1
 
@@ -43,19 +67,15 @@ async function search(reset = false) {
     const data = new FormData()
     data.append('keyword', keyword.value)
     data.append('pageNo', String(pageNo.value))
-
     const res = await videoApi.search(data)
-    const list = res.data?.list || res.data || []
-    totalCount.value = res.data?.totalCount || list.length
-
-    if (reset) {
-      videoList.value = list
-    } else {
-      videoList.value.push(...list)
-    }
+    const payload = res.data || {}
+    const list = normalizeVideoList(payload)
+    totalCount.value = payload.totalCount ?? list.length
+    videoList.value = reset ? list : [...videoList.value, ...list]
     hasMore.value = list.length >= 20
+    if (reset && !list.length) await searchByLocal()
   } catch {
-    if (reset) videoList.value = []
+    if (reset) await searchByLocal()
   } finally {
     loading.value = false
   }

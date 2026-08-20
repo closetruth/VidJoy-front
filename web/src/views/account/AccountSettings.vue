@@ -2,6 +2,13 @@
   <div class="account-settings">
     <form class="settings-form" @submit.prevent="handleSave">
       <div class="form-item">
+        <label>头像</label>
+        <div class="avatar-row">
+          <img :src="avatarPreview" class="avatar-preview" alt="" />
+          <input type="file" accept="image/*" @change="onAvatarChange" />
+        </div>
+      </div>
+      <div class="form-item">
         <label>昵称</label>
         <input v-model="form.nickName" type="text" placeholder="昵称" />
       </div>
@@ -38,14 +45,16 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 import { useUserStore } from '@/stores'
-import { uhomeApi } from '@/api'
+import { uhomeApi, fileApi } from '@/api'
+import { getResourceUrl } from '@/utils/format'
 
 const userStore = useUserStore()
 const saving = ref(false)
 const msg = ref('')
 const isError = ref(false)
+const avatarPath = ref('')
 
 const form = reactive({
   nickName: '',
@@ -56,6 +65,11 @@ const form = reactive({
   noticeInfo: ''
 })
 
+const avatarPreview = computed(() => {
+  return getResourceUrl(avatarPath.value || userStore.userInfo?.avatar)
+    || 'https://i0.hdslb.com/bfs/face/member/face/placeholder.jpg'
+})
+
 function fillForm(info) {
   if (!info) return
   form.nickName = info.nickName || ''
@@ -64,6 +78,7 @@ function fillForm(info) {
   form.school = info.school || ''
   form.personIntroduction = info.personIntroduction || ''
   form.noticeInfo = info.noticeInfo || ''
+  avatarPath.value = info.avatar || ''
 }
 
 async function loadInfo() {
@@ -76,6 +91,18 @@ async function loadInfo() {
   }
 }
 
+async function onAvatarChange(e) {
+  const file = e.target.files?.[0]
+  if (!file) return
+  try {
+    const res = await fileApi.uploadImage(file, true)
+    avatarPath.value = res.data || ''
+  } catch (err) {
+    msg.value = err.message || '头像上传失败'
+    isError.value = true
+  }
+}
+
 async function handleSave() {
   saving.value = true
   msg.value = ''
@@ -83,8 +110,14 @@ async function handleSave() {
   try {
     const data = new FormData()
     Object.entries(form).forEach(([k, v]) => data.append(k, v))
+    if (avatarPath.value) data.append('avatar', avatarPath.value)
     await uhomeApi.updateUserInfo(data)
-    const updated = { ...userStore.userInfo, ...form, sex: Number(form.sex) }
+    const updated = {
+      ...userStore.userInfo,
+      ...form,
+      sex: Number(form.sex),
+      avatar: avatarPath.value || userStore.userInfo?.avatar
+    }
     userStore.setUser(updated)
     msg.value = '保存成功'
   } catch (e) {
@@ -105,6 +138,19 @@ onMounted(loadInfo)
   padding: 24px;
   border-radius: var(--bili-radius);
   box-shadow: var(--bili-shadow);
+}
+
+.avatar-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.avatar-preview {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  object-fit: cover;
 }
 
 .form-item {

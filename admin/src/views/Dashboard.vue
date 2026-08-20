@@ -59,10 +59,6 @@
             <span class="icon">📁</span>
             <span>分类管理</span>
           </router-link>
-          <router-link to="/admin/setting" class="quick-item">
-            <span class="icon">⚙️</span>
-            <span>系统设置</span>
-          </router-link>
         </div>
       </div>
     </div>
@@ -71,7 +67,7 @@
 
 <script setup>
 import { ref, onMounted } from 'vue'
-import { indexApi } from '@/api'
+import { userApi, videoApi, indexApi } from '@/api'
 import { formatCount } from '@/utils/format'
 import { useAdminStore } from '@/stores'
 
@@ -82,11 +78,9 @@ const loading = ref(false)
 
 const statItems = [
   { key: 'userCount', label: '用户总数' },
-  { key: 'videoCount', label: '视频总数' },
-  { key: 'playCount', label: '播放总量' },
-  { key: 'danmuCount', label: '弹幕总量' },
-  { key: 'commentCount', label: '评论总量' },
-  { key: 'onlineCount', label: '当前在线' }
+  { key: 'videoCount', label: '投稿总数' },
+  { key: 'auditCount', label: '待审核' },
+  { key: 'passCount', label: '已通过' }
 ]
 
 const maxBarValue = ref(1)
@@ -99,7 +93,27 @@ function barHeight(val) {
 async function loadStats() {
   try {
     const res = await indexApi.getActualTimeStatisticsInfo()
-    stats.value = res.data || {}
+    const data = res.data || {}
+    if (Object.keys(data).length) {
+      stats.value = data
+      return
+    }
+  } catch {
+    // fallback to list totals
+  }
+  try {
+    const [userRes, allRes, auditRes, passRes] = await Promise.all([
+      userApi.loadUser({ pageNo: 1 }),
+      videoApi.loadVideoList({ pageNo: 1 }),
+      videoApi.loadVideoList({ pageNo: 1, status: 2 }),
+      videoApi.loadVideoList({ pageNo: 1, status: 3 })
+    ])
+    stats.value = {
+      userCount: userRes.data?.totalCount ?? 0,
+      videoCount: allRes.data?.totalCount ?? 0,
+      auditCount: auditRes.data?.totalCount ?? 0,
+      passCount: passRes.data?.totalCount ?? 0
+    }
   } catch {
     stats.value = {}
   }

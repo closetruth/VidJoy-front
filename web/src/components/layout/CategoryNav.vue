@@ -51,7 +51,7 @@ function scrollRight() {
 onMounted(async () => {
   try {
     const data = await categoryStore.loadCategories()
-    categories.value = data.filter((c) => !c.pCategoryId || c.pCategoryId === '0')
+    categories.value = data.filter((c) => !c.pCategoryId || Number(c.pCategoryId) === 0)
   } catch {
     categories.value = []
   }

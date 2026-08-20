@@ -38,7 +38,7 @@
 
 <script setup>
 import { computed } from 'vue'
-import { formatCount, formatDuration, getResourceUrl } from '@/utils/format'
+import { formatCount, formatDuration, getResourceUrl, pickField } from '@/utils/format'
 
 const props = defineProps({
   video: {
@@ -48,7 +48,8 @@ const props = defineProps({
 })
 
 const coverUrl = computed(() => {
-  return getResourceUrl(props.video.videoCover) || 'https://i0.hdslb.com/bfs/archive/placeholder.jpg'
+  const cover = pickField(props.video, 'videoCover', 'video_cover')
+  return getResourceUrl(cover) || 'https://i0.hdslb.com/bfs/archive/placeholder.jpg'
 })
 </script>
 

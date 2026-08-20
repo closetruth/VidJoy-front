@@ -29,7 +29,7 @@
     </div>
 
     <div v-if="loading" class="loading-spinner">加载中</div>
-    <ul v-else class="comment-list">
+    <ul v-else-if="comments.length" class="comment-list">
       <li v-for="comment in comments" :key="comment.commentId" class="comment-item">
         <img :src="getResourceUrl(comment.avatar)" class="avatar" alt="" />
         <div class="comment-body">
@@ -47,6 +47,20 @@
               {{ formatCount(comment.likeCount) }}
             </button>
             <button class="action-btn" @click="replyTo(comment)">回复</button>
+            <button
+              v-if="canTop"
+              class="action-btn"
+              @click="toggleTop(comment)"
+            >
+              {{ comment.topType === 1 ? '取消置顶' : '置顶' }}
+            </button>
+            <button
+              v-if="canDelete(comment)"
+              class="action-btn"
+              @click="deleteComment(comment)"
+            >
+              删除
+            </button>
           </div>
 
           <div v-if="replyingTo === comment.commentId" class="reply-input">
@@ -63,6 +77,13 @@
                 <p class="comment-content">{{ reply.content }}</p>
                 <div class="comment-meta">
                   <span class="time">{{ formatTime(reply.postTime) }}</span>
+                  <button
+                    v-if="canDelete(reply)"
+                    class="action-btn"
+                    @click="deleteComment(reply)"
+                  >
+                    删除
+                  </button>
                 </div>
               </div>
             </li>
@@ -70,6 +91,7 @@
         </div>
       </li>
     </ul>
+    <p v-else class="empty-tip">还没有评论，来抢沙发吧</p>
 
     <div v-if="hasMore && !loading" class="load-more">
       <button class="btn-outline" @click="loadMore">查看更多评论</button>
@@ -78,13 +100,14 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, watch, onMounted } from 'vue'
 import { useUserStore } from '@/stores'
 import { commentApi, userActionApi } from '@/api'
 import { formatCount, formatTime, getResourceUrl } from '@/utils/format'
 
 const props = defineProps({
-  videoId: { type: String, required: true }
+  videoId: { type: String, required: true },
+  videoUserId: { type: String, default: '' }
 })
 
 defineEmits(['need-login'])
@@ -107,8 +130,19 @@ const avatarUrl = computed(() => {
   return avatar ? getResourceUrl(avatar) : 'https://i0.hdslb.com/bfs/face/member/face/placeholder.jpg'
 })
 
+const canTop = computed(() => {
+  const uid = userStore.userInfo?.userId
+  return uid && props.videoUserId && String(uid) === String(props.videoUserId)
+})
+
+function canDelete(comment) {
+  const uid = userStore.userInfo?.userId
+  if (!uid) return false
+  return String(comment.userId) === String(uid) || canTop.value
+}
+
 async function loadComments(reset = false) {
-  if (loading.value) return
+  if (!props.videoId || loading.value) return
   loading.value = true
   if (reset) pageNo.value = 1
 
@@ -119,17 +153,15 @@ async function loadComments(reset = false) {
     data.append('orderType', orderType.value)
 
     const res = await commentApi.loadComment(data)
-    const list = res.data?.list || res.data || []
-    totalCount.value = res.data?.totalCount || list.length
+    const payload = res.data || {}
+    const list = payload.list || payload.records || (Array.isArray(payload) ? payload : [])
+    totalCount.value = payload.totalCount ?? list.length
 
-    if (reset) {
-      comments.value = list
-    } else {
-      comments.value.push(...list)
-    }
+    comments.value = reset ? list : [...comments.value, ...list]
     hasMore.value = list.length >= 20
   } catch {
     if (reset) comments.value = []
+    hasMore.value = false
   } finally {
     loading.value = false
   }
@@ -157,7 +189,7 @@ async function postComment() {
     await commentApi.postComment(data)
     content.value = ''
     inputFocused.value = false
-    loadComments(true)
+    await loadComments(true)
   } finally {
     posting.value = false
   }
@@ -178,20 +210,36 @@ async function submitReply(comment) {
   await commentApi.postComment(data)
   replyingTo.value = null
   replyContent.value = ''
-  loadComments(true)
+  await loadComments(true)
 }
 
 async function likeComment(comment) {
   if (!userStore.isLoggedIn) return
   const data = new FormData()
   data.append('videoId', props.videoId)
-  data.append('actionType', '2')
+  data.append('actionType', '0')
   data.append('actionCount', '1')
   data.append('commentId', comment.commentId)
   await userActionApi.doAction(data)
   comment.likeCount = (comment.likeCount || 0) + 1
 }
 
+async function toggleTop(comment) {
+  if (comment.topType === 1) {
+    await commentApi.cancelTopComment(comment.commentId)
+  } else {
+    await commentApi.topComment(comment.commentId)
+  }
+  await loadComments(true)
+}
+
+async function deleteComment(comment) {
+  if (!confirm('确定删除这条评论？')) return
+  await commentApi.userDelComment(comment.commentId)
+  await loadComments(true)
+}
+
+watch(() => props.videoId, () => loadComments(true))
 onMounted(() => loadComments(true))
 </script>
 
@@ -385,6 +433,13 @@ onMounted(() => loadComments(true))
 .reply-to {
   color: var(--bili-blue);
   font-size: 13px;
+}
+
+.empty-tip {
+  text-align: center;
+  padding: 32px 0;
+  color: var(--bili-text-tertiary);
+  font-size: 14px;
 }
 
 .load-more {

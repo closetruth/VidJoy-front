@@ -21,7 +21,7 @@
           已上传 {{ completedCount }} 个视频，点击或拖拽继续添加
         </p>
         <p v-else>点击或拖拽视频文件到此处上传（可多选）</p>
-        <p class="sub">支持 MP4、FLV 等常见格式，最多 {{ MAX_VIDEO_COUNT }} 个分P</p>
+        <p class="sub">支持 MP4、FLV 等常见格式，最多 {{ maxVideoCount }} 个分P，单个不超过 {{ maxVideoSizeMb }}MB</p>
         <input
           ref="fileInput"
           type="file"
@@ -217,7 +217,7 @@
 <script setup>
 import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { fileApi, ucenterApi } from '@/api'
+import { fileApi, ucenterApi, sysApi } from '@/api'
 import { useCategoryStore } from '@/stores'
 import { getResourceUrl } from '@/utils/format'
 
@@ -258,7 +258,8 @@ const form = reactive({
 })
 
 const VIDEO_CHUNK_SIZE = 1 * 1024 * 1024
-const MAX_VIDEO_COUNT = 10
+const maxVideoCount = ref(10)
+const maxVideoSizeMb = ref(10)
 // 0转码中 1转码失败 2待审核 3审核成功 4审核不通过
 const EDITABLE_STATUS = new Set([1, 3, 4])
 
@@ -272,12 +273,13 @@ const canSubmit = computed(
   () => formEditable.value && hasUploadedVideos.value && !isUploading.value && !pageLoading.value
 )
 
-/** 后端 uploadImage 曾返回 file/yyyyMMdd/xx，实际文件在 file/temp/yyyyMMdd/xx */
+/** uploadImage 返回 cover/yyyyMMdd/xx，与 DB 存储格式一致 */
 function normalizeCoverPath(raw) {
   let path = String(raw || '').replace(/\\/g, '/').replace(/^\/+/, '')
   if (!path) return ''
   if (path.startsWith('file/')) path = path.slice(5)
-  if (/^\d{8}\//.test(path)) path = `temp/${path}`
+  if (path.startsWith('cover/')) return path
+  if (/^\d{8}\//.test(path)) return `cover/${path}`
   return path
 }
 
@@ -453,24 +455,35 @@ function onDrop(e) {
 }
 
 async function handleFiles(fileList) {
-  const videoFiles = Array.from(fileList).filter(isVideoFile)
+  let videoFiles = Array.from(fileList).filter(isVideoFile)
   if (!videoFiles.length) {
     errorMsg.value = '请选择视频文件'
     return
   }
 
-  const remaining = MAX_VIDEO_COUNT - uploadItems.value.length
+  const maxBytes = maxVideoSizeMb.value * 1024 * 1024
+  const oversized = videoFiles.filter((f) => f.size > maxBytes)
+  videoFiles = videoFiles.filter((f) => f.size <= maxBytes)
+  if (!videoFiles.length) {
+    errorMsg.value = `单个视频不能超过 ${maxVideoSizeMb.value}MB`
+    return
+  }
+
+  const remaining = maxVideoCount.value - uploadItems.value.length
   if (remaining <= 0) {
-    errorMsg.value = `最多上传 ${MAX_VIDEO_COUNT} 个视频`
+    errorMsg.value = `最多上传 ${maxVideoCount.value} 个视频`
     return
   }
 
   const filesToAdd = videoFiles.slice(0, remaining)
-  if (filesToAdd.length < videoFiles.length) {
-    errorMsg.value = `最多上传 ${MAX_VIDEO_COUNT} 个视频，已添加前 ${filesToAdd.length} 个`
-  } else {
-    errorMsg.value = ''
+  const messages = []
+  if (oversized.length) {
+    messages.push(`单个视频不能超过 ${maxVideoSizeMb.value}MB，已忽略超限文件`)
   }
+  if (filesToAdd.length < videoFiles.length) {
+    messages.push(`最多上传 ${maxVideoCount.value} 个视频，已添加前 ${filesToAdd.length} 个`)
+  }
+  errorMsg.value = messages.join('；')
 
   const isFirstBatch = !uploadItems.value.length
   const newItems = filesToAdd.map(createUploadItem)
@@ -728,6 +741,17 @@ async function cancelPublish() {
   await deleteAllUploaded()
 }
 
+async function loadSysSetting() {
+  try {
+    const res = await sysApi.getSetting()
+    const s = res.data || {}
+    if (s.videoPCount != null) maxVideoCount.value = Number(s.videoPCount) || 10
+    if (s.videoSize != null) maxVideoSizeMb.value = Number(s.videoSize) || 10
+  } catch {
+    // 使用默认上限
+  }
+}
+
 async function initPage() {
   try {
     const cats = await categoryStore.loadCategories()
@@ -735,6 +759,8 @@ async function initPage() {
   } catch {
     categoryOptions.value = []
   }
+
+  await loadSysSetting()
 
   if (editingVideoId.value) {
     await loadVideoForEdit(editingVideoId.value)

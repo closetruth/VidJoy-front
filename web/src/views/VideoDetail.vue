@@ -8,8 +8,9 @@
             :src="videoSrc"
             :poster="getResourceUrl(videoInfo.videoCover)"
             :danmu-list="danmuList"
-            :show-danmu-input="userStore.isLoggedIn"
-            @send-danmu="handleSendDanmu"
+            :danmu-enabled="!closeDanmu"
+            :show-danmu-input="userStore.isLoggedIn && !closeDanmu"
+            @send-danmu="sendDanmu"
           />
 
           <div class="video-episodes" v-if="episodes.length > 1">
@@ -42,6 +43,7 @@
                 {{ formatCount(videoInfo.danmuCount) }}
               </span>
               <span>{{ formatTime(videoInfo.createTime) }}</span>
+              <span v-if="onlineCount > 0">{{ onlineCount }} 人在看</span>
             </div>
 
             <div class="action-bar">
@@ -55,13 +57,13 @@
                 <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor">
                   <circle cx="12" cy="12" r="10"/>
                 </svg>
-                <span>投币</span>
+                <span>{{ formatCount(videoInfo.coinCount) }}</span>
               </button>
               <button class="action-btn" :class="{ active: collected }" @click="toggleCollect">
                 <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor">
                   <path d="M17 3H7c-1.1 0-2 .9-2 2v16l7-3 7 3V5c0-1.1-.9-2-2-2z"/>
                 </svg>
-                <span>收藏</span>
+                <span>{{ formatCount(videoInfo.collectCount) }}</span>
               </button>
               <button class="action-btn" @click="shareVideo">
                 <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor">
@@ -72,23 +74,33 @@
             </div>
           </div>
 
+          <div v-if="videoInfo.introduction || tagList.length" class="video-desc">
+            <p v-if="tagList.length" class="tag-list">
+              <span v-for="tag in tagList" :key="tag" class="tag">#{{ tag }}</span>
+            </p>
+            <p v-if="videoInfo.introduction" class="intro">{{ videoInfo.introduction }}</p>
+          </div>
+
           <CommentSection
+            v-if="!closeComment"
             :video-id="videoId"
+            :video-user-id="videoInfo.userId"
             @need-login="showLogin = true"
           />
+          <div v-else class="comment-closed">UP 主已关闭评论</div>
         </div>
 
         <aside class="sidebar">
           <div class="uploader-card">
             <router-link :to="`/user/${videoInfo.userId}`" class="uploader-info">
-              <img :src="getResourceUrl(videoInfo.userAvatar)" class="avatar" alt="" />
+              <img :src="getResourceUrl(videoInfo.userAvatar || videoInfo.avatar)" class="avatar" alt="" />
               <div>
                 <p class="nickname">{{ videoInfo.nickName }}</p>
                 <p class="intro">{{ videoInfo.personIntroduction || '这个人很懒，什么都没写' }}</p>
               </div>
             </router-link>
             <button
-              v-if="userStore.isLoggedIn && userStore.userInfo.userId !== videoInfo.userId"
+              v-if="userStore.userInfo?.userId !== videoInfo.userId"
               class="btn-primary follow-btn"
               @click="toggleFollow"
             >
@@ -120,14 +132,24 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import VideoPlayer from '@/components/video/VideoPlayer.vue'
 import CommentSection from '@/components/video/CommentSection.vue'
 import LoginDialog from '@/components/auth/LoginDialog.vue'
 import { useUserStore } from '@/stores'
-import { videoApi, danmuApi, userActionApi, uhomeApi } from '@/api'
-import { formatCount, formatTime, formatDuration, getResourceUrl } from '@/utils/format'
+import { videoApi, fileApi, danmuApi, userActionApi, uhomeApi } from '@/api'
+import { formatCount, formatTime, formatDuration, getResourceUrl, unwrapVideoInfo, applyUserActionList, getDeviceId, normalizeVideoList } from '@/utils/format'
+import { fetchRelatedVideos } from '@/utils/videoList'
+import {
+  addWatchHistory,
+  isCollected,
+  toggleCollect as toggleLocalCollect,
+  isLiked,
+  toggleLike as toggleLocalLike,
+  isCoined,
+  addCoin
+} from '@/utils/localInteract'
 
 const route = useRoute()
 const userStore = useUserStore()
@@ -136,18 +158,30 @@ const videoId = computed(() => route.params.videoId)
 const videoInfo = ref(null)
 const episodes = ref([])
 const currentFileId = ref('')
-const danmuList = ref([])
 const recommendList = ref([])
 const loading = ref(true)
 const liked = ref(false)
 const coined = ref(false)
 const collected = ref(false)
-const followed = ref(false)
 const showLogin = ref(false)
+const onlineCount = ref(0)
+const danmuList = ref([])
+const followed = ref(false)
+let onlineTimer = null
+
+const interactionFlags = computed(() => String(videoInfo.value?.interaction || '').split(',').filter(Boolean))
+const closeDanmu = computed(() => interactionFlags.value.includes('0'))
+const closeComment = computed(() => interactionFlags.value.includes('1'))
+const tagList = computed(() =>
+  String(videoInfo.value?.tags || '')
+    .split(',')
+    .map((t) => t.trim())
+    .filter(Boolean)
+)
 
 const videoSrc = computed(() => {
   if (!currentFileId.value) return ''
-  return `/api/file/videoResource/${currentFileId.value}`
+  return fileApi.videoPlaylistUrl(currentFileId.value)
 })
 
 function normalizeEpisodeList(data) {
@@ -163,28 +197,54 @@ function normalizeEpisodeList(data) {
 async function loadVideoPList() {
   const epRes = await videoApi.loadVideoPList(videoId.value)
   episodes.value = normalizeEpisodeList(epRes.data ?? epRes)
-  if (episodes.value.length) {
-    currentFileId.value = episodes.value[0].fileId
-    await loadDanmu()
-  } else {
-    currentFileId.value = ''
-    danmuList.value = []
-  }
+  currentFileId.value = episodes.value[0]?.fileId || ''
+}
+
+function applyLocalActions(info) {
+  const id = info?.videoId
+  liked.value = isLiked(id)
+  coined.value = isCoined(id)
+  collected.value = isCollected(id)
 }
 
 async function loadVideo() {
   loading.value = true
   episodes.value = []
   currentFileId.value = ''
-  danmuList.value = []
+  liked.value = false
+  coined.value = false
+  collected.value = false
+  onlineCount.value = 0
+  stopOnlineReport()
   try {
     const res = await videoApi.getVideoInfo(videoId.value)
-    videoInfo.value = res.data
+    const payload = res.data || {}
+    videoInfo.value = unwrapVideoInfo(payload)
+    const actions = applyUserActionList(payload.userActionList)
+    applyLocalActions(videoInfo.value)
+    if (actions.liked) liked.value = true
+    if (actions.coined) coined.value = true
+    if (actions.collected) collected.value = true
+    followed.value = Boolean(payload.haveFocus || videoInfo.value.haveFocus)
 
+    addWatchHistory(videoInfo.value)
     await loadVideoPList()
+    startOnlineReport()
+    loadDanmu()
 
-    const recRes = await videoApi.getVideoRecommend(videoId.value)
-    recommendList.value = recRes.data || []
+    try {
+      const rec = await videoApi.getVideoRecommend(videoId.value)
+      const list = normalizeVideoList(rec.data)
+      recommendList.value = list.length
+        ? list.filter((item) => item.videoId !== videoId.value)
+        : await fetchRelatedVideos(videoId.value)
+    } catch {
+      try {
+        recommendList.value = await fetchRelatedVideos(videoId.value)
+      } catch {
+        recommendList.value = []
+      }
+    }
   } catch {
     videoInfo.value = null
     episodes.value = []
@@ -194,16 +254,27 @@ async function loadVideo() {
   }
 }
 
-async function loadDanmu() {
-  if (!currentFileId.value) return
+async function reportOnline() {
+  if (!videoId.value) return
   try {
-    const data = new FormData()
-    data.append('fileId', currentFileId.value)
-    data.append('videoId', videoId.value)
-    const res = await danmuApi.loadDanmu(data)
-    danmuList.value = res.data || []
+    const res = await videoApi.reportVideoPlayOnline(videoId.value, getDeviceId())
+    const n = Number(res?.data)
+    if (Number.isFinite(n) && n >= 0) onlineCount.value = n
   } catch {
-    danmuList.value = []
+    // 接口暂返回 null 时忽略
+  }
+}
+
+function startOnlineReport() {
+  stopOnlineReport()
+  reportOnline()
+  onlineTimer = setInterval(reportOnline, 5000)
+}
+
+function stopOnlineReport() {
+  if (onlineTimer) {
+    clearInterval(onlineTimer)
+    onlineTimer = null
   }
 }
 
@@ -213,55 +284,114 @@ function switchEpisode(ep) {
   loadDanmu()
 }
 
-async function handleSendDanmu({ text, time }) {
-  const data = new FormData()
-  data.append('videoId', videoId.value)
-  data.append('fileId', currentFileId.value)
-  data.append('text', text)
-  data.append('mode', '0')
-  data.append('color', '16777215')
-  data.append('time', String(time))
-  await danmuApi.postDanmu(data)
-  loadDanmu()
+function requireLogin() {
+  if (userStore.isLoggedIn) return true
+  showLogin.value = true
+  return false
 }
 
-async function doUserAction(actionType) {
-  if (!userStore.isLoggedIn) {
-    showLogin.value = true
-    return false
-  }
+async function doVideoAction(actionType) {
   const data = new FormData()
   data.append('videoId', videoId.value)
-  data.append('actionType', actionType)
+  data.append('actionType', String(actionType))
   data.append('actionCount', '1')
-  data.append('commentId', '0')
+  data.append('commentId', '')
   await userActionApi.doAction(data)
-  return true
 }
 
-async function toggleLike() {
-  if (await doUserAction('2')) liked.value = !liked.value
+async function loadDanmu() {
+  if (!videoId.value || closeDanmu.value) {
+    danmuList.value = []
+    return
+  }
+  try {
+    const data = new FormData()
+    data.append('videoId', videoId.value)
+    data.append('fileId', currentFileId.value || '')
+    const res = await danmuApi.loadDanmu(data)
+    const payload = res.data || []
+    danmuList.value = Array.isArray(payload) ? payload : payload.list || []
+  } catch {
+    danmuList.value = []
+  }
 }
 
-async function toggleCoin() {
-  if (await doUserAction('3')) coined.value = !coined.value
-}
-
-async function toggleCollect() {
-  if (await doUserAction('4')) collected.value = !collected.value
+async function sendDanmu(payload) {
+  if (!requireLogin()) return
+  try {
+    const data = new FormData()
+    data.append('videoId', videoId.value)
+    data.append('fileId', currentFileId.value || '')
+    data.append('text', payload.text)
+    data.append('time', String(Math.floor(payload.time || 0)))
+    data.append('color', '16777215')
+    data.append('mode', '0')
+    await danmuApi.postDanmu(data)
+    danmuList.value = [
+      ...danmuList.value,
+      { danmuId: `local-${Date.now()}`, text: payload.text, time: payload.time }
+    ]
+  } catch {
+    // ignore when danmu API is unavailable
+  }
 }
 
 async function toggleFollow() {
-  if (!userStore.isLoggedIn) {
-    showLogin.value = true
-    return
-  }
+  if (!requireLogin() || !videoInfo.value) return
   if (followed.value) {
     await uhomeApi.cancelFocus(videoInfo.value.userId)
+    followed.value = false
   } else {
     await uhomeApi.focus(videoInfo.value.userId)
+    followed.value = true
   }
-  followed.value = !followed.value
+}
+
+function toggleLike() {
+  if (!requireLogin() || !videoInfo.value) return
+  const next = !liked.value
+  doVideoAction(2)
+    .then(() => {
+      liked.value = next
+      videoInfo.value.likeCount = Math.max(0, Number(videoInfo.value.likeCount || 0) + (next ? 1 : -1))
+    })
+    .catch(() => {
+      liked.value = toggleLocalLike(videoInfo.value.videoId)
+      const delta = liked.value ? 1 : -1
+      videoInfo.value.likeCount = Math.max(0, Number(videoInfo.value.likeCount || 0) + delta)
+    })
+}
+
+function toggleCoin() {
+  if (!requireLogin() || !videoInfo.value) return
+  if (coined.value) return
+  doVideoAction(3)
+    .then(() => {
+      coined.value = true
+      videoInfo.value.coinCount = Number(videoInfo.value.coinCount || 0) + 1
+    })
+    .catch(() => {
+      if (addCoin(videoInfo.value.videoId)) {
+        coined.value = true
+        videoInfo.value.coinCount = Number(videoInfo.value.coinCount || 0) + 1
+      }
+    })
+}
+
+function toggleCollect() {
+  if (!requireLogin() || !videoInfo.value) return
+  const next = !collected.value
+  doVideoAction(4)
+    .then(() => {
+      collected.value = next
+      videoInfo.value.collectCount = Math.max(0, Number(videoInfo.value.collectCount || 0) + (next ? 1 : -1))
+      toggleLocalCollect(videoInfo.value)
+    })
+    .catch(() => {
+      collected.value = toggleLocalCollect(videoInfo.value)
+      const delta = collected.value ? 1 : -1
+      videoInfo.value.collectCount = Math.max(0, Number(videoInfo.value.collectCount || 0) + delta)
+    })
 }
 
 function shareVideo() {
@@ -271,6 +401,7 @@ function shareVideo() {
 
 watch(videoId, loadVideo)
 onMounted(loadVideo)
+onUnmounted(stopOnlineReport)
 </script>
 
 <style scoped lang="scss">
@@ -368,6 +499,39 @@ onMounted(loadVideo)
     align-items: center;
     gap: 4px;
   }
+}
+
+.video-desc {
+  background: #fff;
+  border-radius: var(--bili-radius);
+  padding: 16px 20px;
+}
+
+.tag-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.tag {
+  font-size: 13px;
+  color: var(--bili-pink);
+}
+
+.intro {
+  font-size: 14px;
+  line-height: 1.7;
+  color: var(--bili-text-secondary);
+  white-space: pre-wrap;
+}
+
+.comment-closed {
+  background: #fff;
+  border-radius: var(--bili-radius);
+  padding: 32px;
+  text-align: center;
+  color: var(--bili-text-tertiary);
 }
 
 .action-bar {

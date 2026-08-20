@@ -76,17 +76,23 @@ async function loadList(reset = false) {
   if (reset) pageNo.value = 1
 
   try {
-    const data = new FormData()
-    data.append('pageNo', String(pageNo.value))
-    data.append('nickNameFuzzy', query.nickNameFuzzy)
-    if (query.status !== '') data.append('status', query.status)
+    const params = { pageNo: pageNo.value }
+    const kw = query.nickNameFuzzy.trim()
+    if (kw) params.nickNameFuzzy = kw
+    if (query.status !== '') params.status = Number(query.status)
 
-    const res = await userApi.loadUser(data)
-    const items = res.data?.list || res.data || []
+    const res = await userApi.loadUser(params)
+    const payload = res.data || {}
+    const items = payload.list || payload.records || []
+    const pageSize = payload.pageSize || 15
+    const totalCount = payload.totalCount ?? 0
+    const currentPage = payload.pageNo || pageNo.value
+
     list.value = reset ? items : [...list.value, ...items]
-    hasMore.value = items.length >= 20
+    hasMore.value = currentPage * pageSize < totalCount
   } catch {
     if (reset) list.value = []
+    hasMore.value = false
   } finally {
     loading.value = false
   }
@@ -102,10 +108,7 @@ async function toggleStatus(item) {
   const action = newStatus == 0 ? '禁用' : '启用'
   if (!confirm(`确定${action}用户「${item.nickName}」？`)) return
 
-  const data = new FormData()
-  data.append('userId', item.userId)
-  data.append('status', String(newStatus))
-  await userApi.changeStatus(data)
+  await userApi.changeStatus({ userId: item.userId, status: newStatus })
   item.status = newStatus
 }
 

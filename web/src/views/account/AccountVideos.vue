@@ -25,11 +25,11 @@
     <div v-else-if="videoList.length" class="video-list">
       <div v-for="video in videoList" :key="video.videoId" class="video-item">
         <router-link :to="`/video/${video.videoId}`" class="cover-link">
-          <img :src="getResourceUrl(video.videoCover)" alt="" />
+          <img :src="coverUrl(pickField(video, 'videoCover', 'video_cover'))" alt="" @error="onCoverError" />
           <span class="status-tag" :class="statusClass(video.status)">{{ statusLabel(video.status) }}</span>
         </router-link>
         <div class="video-info">
-          <router-link :to="`/video/${video.videoId}`" class="title">{{ video.videoName }}</router-link>
+          <router-link :to="`/video/${video.videoId}`" class="title">{{ videoTitle(video) }}</router-link>
           <p class="meta">
             {{ formatCount(video.playCount) }} 播放 · {{ formatDate(video.createTime) }}
           </p>
@@ -37,10 +37,17 @@
             <button
               v-if="canEditVideo(video.status)"
               type="button"
-              class="edit-btn"
+              class="action-btn edit-btn"
               @click="goEdit(video.videoId)"
             >
               编辑
+            </button>
+            <button
+              type="button"
+              class="action-btn delete-btn"
+              @click="deleteVideo(video)"
+            >
+              删除
             </button>
           </div>
         </div>
@@ -60,7 +67,7 @@
 import { ref, reactive, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ucenterApi } from '@/api'
-import { formatCount, formatDate, getResourceUrl } from '@/utils/format'
+import { formatCount, formatDate, getResourceUrl, pickField, normalizeVideoItem } from '@/utils/format'
 
 const router = useRouter()
 
@@ -75,6 +82,7 @@ const counts = reactive({})
 
 const statusTabs = [
   { value: '', label: '全部', countKey: 'allCount' },
+  { value: '-1', label: '转码中', countKey: 'processingCount' },
   { value: '2', label: '审核中', countKey: 'auditCount' },
   { value: '3', label: '已通过', countKey: 'passCount' },
   { value: '4', label: '未通过', countKey: 'failCount' }
@@ -94,8 +102,33 @@ function canEditVideo(status) {
   return EDITABLE_STATUS.has(Number(status))
 }
 
+const COVER_PLACEHOLDER = 'https://i0.hdslb.com/bfs/archive/placeholder.jpg'
+
+function coverUrl(sourceName) {
+  return getResourceUrl(sourceName) || COVER_PLACEHOLDER
+}
+
+function videoTitle(video) {
+  return pickField(video, 'videoName', 'video_name') || '未命名视频'
+}
+
+function onCoverError(e) {
+  e.target.src = COVER_PLACEHOLDER
+}
+
 function goEdit(videoId) {
   router.push(`/upload/${videoId}`)
+}
+
+async function deleteVideo(video) {
+  if (!confirm(`确定删除「${videoTitle(video)}」？删除后无法恢复。`)) return
+  try {
+    await ucenterApi.deleteVideo(video.videoId)
+    videoList.value = videoList.value.filter((item) => item.videoId !== video.videoId)
+    loadCounts()
+  } catch (e) {
+    errorMsg.value = e?.message || '删除失败'
+  }
 }
 
 function statusLabel(s) {
@@ -114,10 +147,27 @@ function changeStatus(val) {
 async function loadCounts() {
   try {
     const res = await ucenterApi.getVideoCountInfo()
-    Object.assign(counts, res.data || {})
+    const data = res.data || {}
+    Object.assign(counts, data)
+    const { allCount = 0, auditCount = 0, passCount = 0, failCount = 0 } = data
+    counts.processingCount = Math.max(0, allCount - auditCount - passCount - failCount)
   } catch {
     // ignore
   }
+}
+
+function buildListParams() {
+  const params = {
+    pageNo: pageNo.value
+  }
+  if (status.value !== '') {
+    params.status = Number(status.value)
+  }
+  const kw = keyword.value.trim()
+  if (kw) {
+    params.videoNameFuzzy = kw
+  }
+  return params
 }
 
 async function loadList(reset = false) {
@@ -126,15 +176,15 @@ async function loadList(reset = false) {
   if (reset) pageNo.value = 1
 
   try {
-    const data = new FormData()
-    data.append('status', status.value)
-    data.append('pageNo', String(pageNo.value))
-    data.append('videoNameFuzzy', keyword.value)
+    const res = await ucenterApi.loadVideoList(buildListParams())
+    const payload = res.data || {}
+    const list = (payload.list || payload.records || []).map(normalizeVideoItem)
+    const pageSize = payload.pageSize || 15
+    const totalCount = payload.totalCount ?? 0
+    const currentPage = payload.pageNo || pageNo.value
 
-    const res = await ucenterApi.loadVideoList(data)
-    const list = res.data?.list || []
     videoList.value = reset ? list : [...videoList.value, ...list]
-    hasMore.value = list.length >= 20
+    hasMore.value = currentPage * pageSize < totalCount
     errorMsg.value = ''
   } catch (e) {
     if (reset) videoList.value = []
@@ -217,6 +267,7 @@ onMounted(() => {
     height: 90px;
     border-radius: 6px;
     object-fit: cover;
+    background: #e3e5e7;
   }
 }
 
@@ -260,18 +311,39 @@ onMounted(() => {
 
 .actions {
   margin-top: 10px;
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
-.edit-btn {
+.action-btn {
   padding: 4px 12px;
   border-radius: 6px;
   font-size: 13px;
+
+  &:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+}
+
+.edit-btn {
   color: var(--bili-pink);
   background: rgba(251, 114, 153, 0.08);
   border: 1px solid rgba(251, 114, 153, 0.25);
 
-  &:hover {
+  &:hover:not(:disabled) {
     background: rgba(251, 114, 153, 0.14);
+  }
+}
+
+.delete-btn {
+  color: #f53f3f;
+  background: rgba(245, 63, 63, 0.08);
+  border: 1px solid rgba(245, 63, 63, 0.22);
+
+  &:hover:not(:disabled) {
+    background: rgba(245, 63, 63, 0.14);
   }
 }
 

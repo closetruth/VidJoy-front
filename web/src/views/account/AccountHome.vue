@@ -2,7 +2,7 @@
   <div class="account-home">
     <div class="stat-row">
       <div class="stat-item">
-        <span class="num">{{ formatCount(countInfo.videoCount) }}</span>
+        <span class="num">{{ formatCount(countInfo.allCount || countInfo.videoCount) }}</span>
         <span class="label">投稿</span>
       </div>
       <div class="stat-item">
@@ -14,7 +14,7 @@
         <span class="label">关注</span>
       </div>
       <div class="stat-item">
-        <span class="num">{{ formatCount(countInfo.coinCount) }}</span>
+        <span class="num">{{ formatCount(countInfo.currentCoin || userStore.userInfo?.currentCoin) }}</span>
         <span class="label">硬币</span>
       </div>
     </div>
@@ -59,8 +59,8 @@
 import { ref, onMounted } from 'vue'
 import VideoCard from '@/components/video/VideoCard.vue'
 import { useUserStore } from '@/stores'
-import { ucenterApi, accountApi } from '@/api'
-import { formatCount } from '@/utils/format'
+import { ucenterApi, accountApi, uhomeApi } from '@/api'
+import { formatCount, normalizeVideoList } from '@/utils/format'
 
 const userStore = useUserStore()
 const videoList = ref([])
@@ -70,13 +70,20 @@ const loading = ref(true)
 async function loadData() {
   loading.value = true
   try {
-    const [videoRes, countRes, userCountRes] = await Promise.all([
-      ucenterApi.loadVideoList({ status: '', pageNo: '1', videoNameFuzzy: '' }),
+    const [videoRes, countRes, userCountRes, profileRes] = await Promise.all([
+      ucenterApi.loadVideoList({ pageNo: 1 }),
       ucenterApi.getVideoCountInfo().catch(() => ({ data: {} })),
-      accountApi.getUserCountInfo().catch(() => ({ data: {} }))
+      accountApi.getUserCountInfo().catch(() => ({ data: {} })),
+      userStore.userInfo?.userId
+        ? uhomeApi.getUserInfo(userStore.userInfo.userId).catch(() => ({ data: {} }))
+        : Promise.resolve({ data: {} })
     ])
-    videoList.value = (videoRes.data?.list || videoRes.data || []).slice(0, 4)
-    countInfo.value = { ...countRes.data, ...userCountRes.data }
+    videoList.value = normalizeVideoList(videoRes.data).slice(0, 4)
+    countInfo.value = {
+      ...(userCountRes.data || {}),
+      ...(profileRes.data || {}),
+      ...(countRes.data || {})
+    }
   } catch {
     videoList.value = []
   } finally {

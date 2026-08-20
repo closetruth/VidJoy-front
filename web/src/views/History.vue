@@ -27,31 +27,52 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import { historyApi } from '@/api'
-import { formatTime, getResourceUrl } from '@/utils/format'
+import { formatTime, getResourceUrl, normalizeVideoList } from '@/utils/format'
+import { getWatchHistory, removeWatchHistory, clearWatchHistory } from '@/utils/localInteract'
 
 const historyList = ref([])
 const loading = ref(true)
+const useLocal = ref(false)
 
 async function loadHistory() {
   loading.value = true
   try {
     const res = await historyApi.loadHistory()
-    historyList.value = res.data || []
+    const list = normalizeVideoList(res.data)
+    historyList.value = list.length ? list : getWatchHistory()
+    useLocal.value = !list.length
   } catch {
-    historyList.value = []
+    useLocal.value = true
+    historyList.value = getWatchHistory()
   } finally {
     loading.value = false
   }
 }
 
 async function removeItem(videoId) {
-  await historyApi.delHistory(videoId)
+  if (useLocal.value) {
+    removeWatchHistory(videoId)
+  } else {
+    try {
+      await historyApi.delHistory(videoId)
+    } catch {
+      removeWatchHistory(videoId)
+    }
+  }
   historyList.value = historyList.value.filter((h) => h.videoId !== videoId)
 }
 
 async function cleanAll() {
   if (!confirm('确定清空所有历史记录？')) return
-  await historyApi.cleanHistory()
+  if (useLocal.value) {
+    clearWatchHistory()
+  } else {
+    try {
+      await historyApi.cleanHistory()
+    } catch {
+      clearWatchHistory()
+    }
+  }
   historyList.value = []
 }
 

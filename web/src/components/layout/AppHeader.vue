@@ -90,8 +90,8 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useUserStore } from '@/stores'
-import { videoApi } from '@/api'
 import { getResourceUrl } from '@/utils/format'
+import { videoApi } from '@/api'
 
 defineEmits(['open-login'])
 
@@ -130,7 +130,8 @@ onMounted(async () => {
   window.addEventListener('scroll', onScroll)
   try {
     const res = await videoApi.getSearchKeywordTop()
-    hotKeywords.value = res.data || []
+    const list = res.data || []
+    hotKeywords.value = (Array.isArray(list) ? list : []).map((item) => item.keyword || item).filter(Boolean)
   } catch {
     hotKeywords.value = ['编程', '游戏', '动漫', '音乐', '科技']
   }

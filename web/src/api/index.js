@@ -10,26 +10,28 @@ export const accountApi = {
 }
 
 export const categoryApi = {
-  loadAllCategory: () => request.post('/category/loadAllCategory')
+  loadAllCategory: () => request.get('/category/loadAllCategory')
 }
 
 export const videoApi = {
-  loadRecommendVideo: () => request.post('/video/loadRecommendVideo'),
-  loadVideo: (data) => request.post('/video/loadVideo', data),
-  getVideoInfo: (videoId) => request.post('/video/getVideoInfo', null, { params: { videoId } }),
-  // 获取视频分P：返回 VideoInfoFile 列表（fileId / fileName / fileIndex / duration）
-  loadVideoPList: (videoId) => request.post('/video/loadVideoPList', null, { params: { videoId } }),
+  loadRecommendVideo: () => request.get('/video/loadRecommendVideo'),
+  loadVideo: (params) => request.get('/video/loadVideo', { params }),
+  getVideoInfo: (videoId) => request.get('/video/getVideoInfo', { params: { videoId } }),
+  loadVideoPList: (videoId) => request.get('/video/loadVideoPList', { params: { videoId } }),
+  reportVideoPlayOnline: (videoId, deviceId) =>
+    request.get('/video/reportVideoPlayOnline', { params: { videoId, deviceId } }),
   search: (data) => request.post('/video/search', data),
   getSearchKeywordTop: () => request.post('/video/getSearchKeywordTop'),
   getVideoRecommend: (videoId) => request.post('/video/getVideoRecommend', null, { params: { videoId } }),
-  loadHotVideoList: () => request.post('/video/loadHotVideoList'),
-  reportVideoPlayOnline: (data) => request.post('/video/reportVideoPlayOnline', data)
+  loadHotVideoList: () => request.post('/video/loadHotVideoList')
 }
 
 export const commentApi = {
   loadComment: (data) => request.post('/comment/loadComment', data),
   postComment: (data) => request.post('/comment/postComment', data),
-  userDelComment: (commentId) => request.post('/comment/userDelComment', { commentId })
+  userDelComment: (commentId) => request.post('/comment/userDelComment', { commentId }),
+  topComment: (commentId) => request.post('/comment/topComment', { commentId }),
+  cancelTopComment: (commentId) => request.post('/comment/cancelTopComment', { commentId })
 }
 
 export const danmuApi = {
@@ -49,8 +51,10 @@ export const historyApi = {
 
 export const messageApi = {
   getNoReadCount: () => request.post('/message/getNoReadCount'),
+  getNoReadCountGroup: () => request.post('/message/getNoReadCountGroup'),
   loadMessage: () => request.post('/message/loadMessage'),
-  readAll: () => request.post('/message/readAll')
+  readAll: () => request.post('/message/readAll'),
+  delMessage: (messageId) => request.post('/message/delMessage', { messageId })
 }
 
 export const uhomeApi = {
@@ -59,22 +63,42 @@ export const uhomeApi = {
   loadUserCollection: (data) => request.post('/uhome/loadUserCollection', data),
   updateUserInfo: (data) => request.post('/uhome/updateUserInfo', data),
   focus: (userId) => request.post('/uhome/focus', { userId }),
-  cancelFocus: (userId) => request.post('/uhome/cancelFocus', { userId })
+  cancelFocus: (userId) => request.post('/uhome/cancelFocus', { userId }),
+  loadFocusList: (data) => request.post('/uhome/loadFocusList', data),
+  loadFansList: (data) => request.post('/uhome/loadFansList', data),
+  saveTheme: (data) => request.post('/uhome/saveTheme', data),
+  loadVideoSeries: (data) => request.post('/uhome/series/loadVideoSeries', data),
+  loadAllVideo: (data) => request.post('/uhome/series/loadAllVideo', data),
+  changeVideoSeriesSort: (data) => request.post('/uhome/series/changeVideoSeriesSort', data),
+  getVideoSeriesDetail: (data) => request.post('/series/getVideoSeriesDetail', data),
+  delVideoSeries: (data) => request.post('/uhome/series/delVideoSeries', data),
+  saveVideoSeries: (data) => request.post('/uhome/series/saveVideoSeries', data),
+  saveSeriesVideo: (data) => request.post('/uhome/series/saveSeriesVideo', data),
+  delSeriesVideo: (data) => request.post('/uhome/series/delSeriesVideo', data),
+  loadVideoSeriesWithVideo: (data) => request.post('/uhome/series/loadVideoSeriesWithVideo', data)
 }
 
 export const ucenterApi = {
-  loadVideoList: (data) => request.post('/ucenter/loadVideoList', data),
-  getVideoCountInfo: () => request.post('/ucenter/getVideoCountInfo'),
-  getVideoByVideoId: (videoId) => {
+  loadVideoList: (params) => request.get('/ucenter/loadVideoList', { params }),
+  getVideoCountInfo: () => request.get('/ucenter/getVideoCountInfo'),
+  getVideoByVideoId: (videoId) =>
+    request.get('/ucenter/getVideoByVideoId', { params: { videoId } }),
+  postVideo: (data) => request.post('/ucenter/postVideo', data),
+  saveVideoInteraction: (videoId, interaction) => {
     const data = new FormData()
     data.append('videoId', videoId)
-    return request.post('/ucenter/getVideoByVideoId', data)
+    data.append('interaction', interaction ?? '')
+    return request.post('/ucenter/saveVideoInteraction', data)
   },
-  postVideo: (data) => request.post('/ucenter/postVideo', data)
+  deleteVideo: (videoId) => {
+    const data = new FormData()
+    data.append('videoId', videoId)
+    return request.post('/ucenter/deleteVideo', data)
+  }
 }
 
 export const sysApi = {
-  getSetting: () => request.post('/sysSetting/getSetting')
+  getSetting: () => request.get('/sysSetting/getSetting')
 }
 
 export const fileApi = {
@@ -104,5 +128,6 @@ export const fileApi = {
     data.append('file', file)
     data.append('createThumbnail', String(createThumbnail))
     return request.post('/file/uploadImage', data)
-  }
+  },
+  videoPlaylistUrl: (fileId) => `/api/file/videoResource/${encodeURIComponent(fileId)}/index.m3u8`
 }

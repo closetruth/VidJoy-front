@@ -83,7 +83,7 @@ import { ref, computed, watch, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import VideoCard from '@/components/video/VideoCard.vue'
 import { categoryApi, videoApi } from '@/api'
-import { getResourceUrl } from '@/utils/format'
+import { getResourceUrl, normalizeVideoList, buildLoadVideoParams } from '@/utils/format'
 
 const route = useRoute()
 const router = useRouter()
@@ -145,13 +145,18 @@ async function loadVideos(reset = false) {
   }
 
   try {
-    const data = new FormData()
-    data.append('pCategoryId', requestPCategoryId.value)
-    data.append('categoryId', requestCategoryId.value)
-    data.append('pageNo', String(pageNo.value))
-
-    const res = await videoApi.loadVideo(data)
-    const list = res.data?.list || res.data || []
+    const res = await videoApi.loadVideo(
+      buildLoadVideoParams({
+        pCategoryId: requestPCategoryId.value,
+        categoryId: requestCategoryId.value,
+        pageNo: pageNo.value
+      })
+    )
+    const payload = res.data || {}
+    const list = normalizeVideoList(payload)
+    const pageSize = payload.pageSize || 15
+    const totalCount = payload.totalCount ?? 0
+    const currentPage = payload.pageNo || pageNo.value
 
     if (reset) {
       videoList.value = list
@@ -159,7 +164,7 @@ async function loadVideos(reset = false) {
       videoList.value.push(...list)
     }
 
-    hasMore.value = list.length >= 20
+    hasMore.value = currentPage * pageSize < totalCount
   } catch {
     if (reset) videoList.value = []
     hasMore.value = false

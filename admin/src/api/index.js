@@ -14,7 +14,7 @@ export const categoryApi = {
 }
 
 export const videoApi = {
-  loadVideoList: (data) => request.post('/videoInfo/loadVideoList', data),
+  loadVideoList: (params) => request.get('/videoInfo/loadVideoList', { params }),
   auditVideo: (data) => request.post('/videoInfo/auditVideo', data),
   deleteVideo: (videoId) => request.post('/videoInfo/deleteVideo', { videoId }),
   recommendVideo: (videoId) => request.post('/videoInfo/recommendVideo', { videoId }),
@@ -39,8 +39,8 @@ export const interactApi = {
 }
 
 export const userApi = {
-  loadUser: (data) => request.post('/user/loadUser', data),
-  changeStatus: (data) => request.post('/user/changeStatus', data)
+  loadUser: (params) => request.get('/user/loadUser', { params }),
+  changeStatus: (params) => request.post('/user/changeStatus', null, { params })
 }
 
 export const fileApi = {

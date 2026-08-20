@@ -62,7 +62,12 @@ function initPlayer() {
 
   if (props.src.includes('.m3u8') || props.src.includes('videoResource')) {
     if (Hls.isSupported()) {
-      hls = new Hls()
+      hls = new Hls({
+        xhrSetup(xhr) {
+          xhr.withCredentials = true
+          xhr.overrideMimeType?.('application/vnd.apple.mpegurl')
+        }
+      })
       hls.loadSource(props.src)
       hls.attachMedia(videoRef.value)
     } else if (videoRef.value.canPlayType('application/vnd.apple.mpegurl')) {

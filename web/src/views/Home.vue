@@ -62,7 +62,7 @@
 import { ref, onMounted } from 'vue'
 import VideoCard from '@/components/video/VideoCard.vue'
 import { videoApi } from '@/api'
-import { getResourceUrl } from '@/utils/format'
+import { getResourceUrl, normalizeVideoList, buildLoadVideoParams } from '@/utils/format'
 
 const recommendList = ref([])
 const videoList = ref([])
@@ -73,7 +73,7 @@ const hasMore = ref(true)
 async function loadRecommend() {
   try {
     const res = await videoApi.loadRecommendVideo()
-    recommendList.value = res.data || []
+    recommendList.value = normalizeVideoList(res.data)
   } catch {
     recommendList.value = []
   }
@@ -88,13 +88,12 @@ async function loadVideos(reset = false) {
   }
 
   try {
-    const data = new FormData()
-    data.append('pCategoryId', '0')
-    data.append('categoryId', '0')
-    data.append('pageNo', String(pageNo.value))
-
-    const res = await videoApi.loadVideo(data)
-    const list = res.data?.list || res.data || []
+    const res = await videoApi.loadVideo(buildLoadVideoParams({ pageNo: pageNo.value }))
+    const payload = res.data || {}
+    const list = normalizeVideoList(payload)
+    const pageSize = payload.pageSize || 15
+    const totalCount = payload.totalCount ?? 0
+    const currentPage = payload.pageNo || pageNo.value
 
     if (reset) {
       videoList.value = list
@@ -102,7 +101,10 @@ async function loadVideos(reset = false) {
       videoList.value.push(...list)
     }
 
-    hasMore.value = list.length >= 20
+    hasMore.value = currentPage * pageSize < totalCount
+    if (!recommendList.value.length && videoList.value.length) {
+      recommendList.value = videoList.value.slice(0, 5)
+    }
   } catch {
     if (reset) videoList.value = []
     hasMore.value = false

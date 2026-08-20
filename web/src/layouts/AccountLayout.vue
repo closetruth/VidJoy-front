@@ -30,7 +30,7 @@
 </template>
 
 <script setup>
-import { computed, onMounted } from 'vue'
+import { computed } from 'vue'
 import { useRoute } from 'vue-router'
 import { useUserStore } from '@/stores'
 import { getResourceUrl } from '@/utils/format'
@@ -48,13 +48,9 @@ const menuItems = computed(() => [
   { path: '/account/videos', title: '我的投稿', icon: '🎬' },
   { path: '/account/collection', title: '我的收藏', icon: '⭐' },
   { path: '/account/history', title: '历史记录', icon: '🕐' },
-  { path: '/account/message', title: '我的消息', icon: '💬', badge: userStore.noReadCount || null },
+  { path: '/account/message', title: '我的消息', icon: '💬' },
   { path: '/account/settings', title: '账号设置', icon: '⚙️' }
 ])
-
-onMounted(() => {
-  userStore.fetchNoReadCount()
-})
 </script>
 
 <style scoped lang="scss">

@@ -40,8 +40,108 @@ export function formatDate(dateStr) {
   return new Date(dateStr).toLocaleString('zh-CN')
 }
 
+/** 后端 getResource 拼 projectFolder + file/ + sourceName，需保留 cover/ 等前缀 */
+export function normalizeResourcePath(sourceName) {
+  let path = String(sourceName || '').replace(/\\/g, '/').replace(/^\/+/, '')
+  if (!path) return ''
+  if (path.startsWith('file/')) path = path.slice(5)
+  if (
+    !path.startsWith('cover/') &&
+    !path.startsWith('temp/') &&
+    !path.startsWith('video/') &&
+    !path.startsWith('avatar/') &&
+    (/^\d{8}\//.test(path) || /^\d{4}-\d{2}\//.test(path))
+  ) {
+    path = `cover/${path}`
+  }
+  return path
+}
+
 export function getResourceUrl(sourceName) {
   if (!sourceName) return ''
   if (sourceName.startsWith('http')) return sourceName
-  return `/api/file/getResource?sourceName=${encodeURIComponent(sourceName)}`
+  const path = normalizeResourcePath(sourceName)
+  if (!path) return ''
+  return `/api/file/getResource?sourceName=${encodeURIComponent(path)}`
+}
+
+export function pickField(obj, ...keys) {
+  if (!obj) return ''
+  for (const key of keys) {
+    const val = obj[key]
+    if (val != null && val !== '') return val
+  }
+  return ''
+}
+
+/** 列表接口返回的单条视频归一化 */
+export function normalizeVideoItem(item) {
+  if (!item || typeof item !== 'object') return item
+  return {
+    ...item,
+    videoId: pickField(item, 'videoId', 'video_id') || item.videoId,
+    videoName: pickField(item, 'videoName', 'video_name') || item.videoName,
+    videoCover: pickField(item, 'videoCover', 'video_cover') || item.videoCover,
+    nickName: pickField(item, 'nickName', 'nick_name') || item.nickName,
+    userId: pickField(item, 'userId', 'user_id') || item.userId,
+    userAvatar: pickField(item, 'userAvatar', 'user_avatar', 'avatar') || item.userAvatar,
+    pCategoryId: pickField(item, 'pCategoryId', 'pcategoryId', 'p_category_id') || item.pCategoryId,
+    playCount: pickField(item, 'playCount', 'play_count') || item.playCount || 0,
+    danmuCount: pickField(item, 'danmuCount', 'danmu_count') || item.danmuCount || 0,
+    duration: pickField(item, 'duration') || item.duration || 0
+  }
+}
+
+export function normalizeVideoList(payload) {
+  if (Array.isArray(payload)) return payload.map(normalizeVideoItem)
+  const list = payload?.list || payload?.records || []
+  return list.map(normalizeVideoItem)
+}
+
+/** getVideoInfo 返回 VideoInfoResultVO { videoInfo, userActionList } */
+export function unwrapVideoInfo(payload) {
+  if (!payload || typeof payload !== 'object') return null
+  const info = payload.videoInfo || payload
+  return normalizeVideoItem(info)
+}
+
+/** 2点赞 3投币 4收藏，与详情页 doAction 保持一致 */
+export function applyUserActionList(list) {
+  const actions = { liked: false, coined: false, collected: false }
+  if (!Array.isArray(list)) return actions
+  for (const item of list) {
+    const type = Number(item?.actionType ?? item?.action_type)
+    if (type === 2) actions.liked = true
+    if (type === 3) actions.coined = true
+    if (type === 4) actions.collected = true
+  }
+  return actions
+}
+
+const DEVICE_ID_KEY = 'vidjoy_device_id'
+
+export function getDeviceId() {
+  try {
+    let id = localStorage.getItem(DEVICE_ID_KEY)
+    if (!id) {
+      id = crypto.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2, 12)}`
+      localStorage.setItem(DEVICE_ID_KEY, id)
+    }
+    return id
+  } catch {
+    return `tmp-${Date.now()}`
+  }
+}
+
+/** loadVideo 查询参数：0 不能传给后端，否则会被当成有效分类 ID 过滤 */
+export function buildLoadVideoParams({ pCategoryId, categoryId, pageNo } = {}) {
+  const params = {}
+  if (pageNo != null) params.pageNo = pageNo
+
+  const pId = Number(pCategoryId)
+  const cId = Number(categoryId)
+  if (Number.isFinite(pId) && pId > 0) params.pCategoryId = pId
+  if (Number.isFinite(cId) && cId > 0) params.categoryId = cId
+
+  return params
 }

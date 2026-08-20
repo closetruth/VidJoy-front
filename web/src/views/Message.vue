@@ -21,6 +21,7 @@
           <p>{{ msg.content || msg.messageContent }}</p>
           <span class="time">{{ formatTime(msg.createTime) }}</span>
         </div>
+        <button class="del-btn" @click="removeItem(msg)">×</button>
       </li>
     </ul>
     <div v-else class="empty-state">暂无消息</div>
@@ -37,11 +38,16 @@ const userStore = useUserStore()
 const messages = ref([])
 const loading = ref(true)
 
+function normalizeMessages(payload) {
+  if (Array.isArray(payload)) return payload
+  return payload?.list || payload?.records || []
+}
+
 async function loadMessages() {
   loading.value = true
   try {
     const res = await messageApi.loadMessage()
-    messages.value = res.data || []
+    messages.value = normalizeMessages(res.data)
   } catch {
     messages.value = []
   } finally {
@@ -55,14 +61,15 @@ async function readAll() {
   userStore.fetchNoReadCount()
 }
 
+async function removeItem(msg) {
+  await messageApi.delMessage(msg.messageId)
+  messages.value = messages.value.filter((m) => m.messageId !== msg.messageId)
+}
+
 onMounted(loadMessages)
 </script>
 
 <style scoped lang="scss">
-.message-page {
-  padding: 0;
-}
-
 .page-actions {
   display: flex;
   justify-content: flex-end;
@@ -112,6 +119,18 @@ onMounted(loadMessages)
   .time {
     font-size: 12px;
     color: var(--bili-text-tertiary);
+  }
+}
+
+.del-btn {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  color: var(--bili-text-tertiary);
+
+  &:hover {
+    background: #f6f7f8;
+    color: var(--bili-pink);
   }
 }
 
