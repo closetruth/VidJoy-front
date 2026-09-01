@@ -297,8 +297,8 @@ const coverPreview = computed(() => {
 
 const interactionValue = computed(() => {
   const parts = []
-  if (closeDanmu.value) parts.push('0')
-  if (closeComment.value) parts.push('1')
+  if (closeDanmu.value) parts.push('1')
+  if (closeComment.value) parts.push('0')
   return parts.join(',')
 })
 
@@ -378,8 +378,8 @@ function fillFormFromVideoInfo(info) {
   tagList.value = (info.tags || '').split(',').map((t) => t.trim()).filter(Boolean)
 
   const interaction = String(info.interaction || '')
-  closeDanmu.value = interaction.split(',').includes('0')
-  closeComment.value = interaction.split(',').includes('1')
+  closeDanmu.value = interaction.split(',').includes('1')
+  closeComment.value = interaction.split(',').includes('0')
 
   if (info.pCategoryId != null && info.categoryId != null) {
     selectedCategoryKey.value = `${info.pCategoryId}:${info.categoryId}`

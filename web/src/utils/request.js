@@ -1,9 +1,24 @@
 import axios from 'axios'
+import { loadToken, clearAuthSession } from '@/utils/auth'
 
 const request = axios.create({
   baseURL: '/api',
   timeout: 30000,
   withCredentials: true
+})
+
+function getWebTokenFromCookie() {
+  if (typeof document === 'undefined') return ''
+  const match = document.cookie.match(/(?:^|;\s*)token=([^;]*)/)
+  return match ? decodeURIComponent(match[1]) : ''
+}
+
+request.interceptors.request.use((config) => {
+  const token = loadToken() || getWebTokenFromCookie()
+  if (token) {
+    config.headers.token = token
+  }
+  return config
 })
 
 function isSuccess(res) {
@@ -16,6 +31,9 @@ function isSuccess(res) {
 request.interceptors.response.use(
   (response) => {
     const res = response.data
+    if (res?.code === 901) {
+      clearAuthSession()
+    }
     if (isSuccess(res)) return res
     return Promise.reject(new Error(res.info || res.msg || res.message || '请求失败'))
   },

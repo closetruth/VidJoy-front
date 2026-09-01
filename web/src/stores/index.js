@@ -1,7 +1,12 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { accountApi, categoryApi, messageApi } from '@/api'
-import { loadUserInfo, saveUserInfo, clearUserInfo, normalizeUserInfo } from '@/utils/auth'
+import {
+  loadUserInfo,
+  saveAuthSession,
+  clearAuthSession,
+  normalizeUserInfo
+} from '@/utils/auth'
 
 export const useUserStore = defineStore('user', () => {
   const userInfo = ref(loadUserInfo())
@@ -11,36 +16,30 @@ export const useUserStore = defineStore('user', () => {
   const isLoggedIn = computed(() => !!normalizeUserInfo(userInfo.value))
 
   function setUser(info) {
-    const normalized = saveUserInfo(info)
-    userInfo.value = normalized
-    return normalized
+    const user = saveAuthSession(info)
+    userInfo.value = user
+    return user
   }
 
   async function autoLogin() {
     try {
       const res = await accountApi.autoLogin()
-      const user = normalizeUserInfo(res.data ?? res)
+      const user = saveAuthSession(res.data ?? res)
       if (user) {
-        userInfo.value = saveUserInfo(user)
         fetchNoReadCount()
         return true
       }
       userInfo.value = null
-      clearUserInfo()
       return false
     } catch {
       userInfo.value = null
-      clearUserInfo()
+      clearAuthSession()
       return false
     }
   }
 
-  /** 进入需登录页面前先尝试 cookie 自动登录 */
+  /** 向服务端校验 cookie/token，不能只看 localStorage */
   async function ensureAuth() {
-    if (isLoggedIn.value) {
-      fetchNoReadCount()
-      return true
-    }
     if (!authPromise) {
       authPromise = autoLogin().finally(() => {
         authPromise = null
@@ -52,11 +51,11 @@ export const useUserStore = defineStore('user', () => {
 
   async function login(formData) {
     const res = await accountApi.login(formData)
-    const user = normalizeUserInfo(res.data ?? res)
+    const user = saveAuthSession(res.data ?? res)
     if (!user) {
       throw new Error('登录成功但未返回用户信息')
     }
-    setUser(user)
+    userInfo.value = user
     fetchNoReadCount()
     return res
   }
@@ -66,7 +65,7 @@ export const useUserStore = defineStore('user', () => {
       await accountApi.logout()
     } finally {
       userInfo.value = null
-      clearUserInfo()
+      clearAuthSession()
       noReadCount.value = 0
       authPromise = null
     }

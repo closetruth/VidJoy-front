@@ -35,8 +35,9 @@ export const commentApi = {
 }
 
 export const danmuApi = {
-  loadDanmu: (data) => request.post('/danmu/loadDanmu', data),
-  postDanmu: (data) => request.post('/danmu/postDanmu', data)
+  loadDanmu: (fileId, videoId) =>
+    request.get('/videoDanmu/loadDanmu', { params: { fileId, videoId } }),
+  postDanmu: (data) => request.post('/videoDanmu/postDanmu', data)
 }
 
 export const userActionApi = {

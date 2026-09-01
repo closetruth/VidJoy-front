@@ -5,6 +5,7 @@
       <div class="video-main container">
         <div class="player-area">
           <VideoPlayer
+            ref="playerRef"
             :src="videoSrc"
             :poster="getResourceUrl(videoInfo.videoCover)"
             :danmu-list="danmuList"
@@ -140,6 +141,7 @@ import LoginDialog from '@/components/auth/LoginDialog.vue'
 import { useUserStore } from '@/stores'
 import { videoApi, fileApi, danmuApi, userActionApi, uhomeApi } from '@/api'
 import { formatCount, formatTime, formatDuration, getResourceUrl, unwrapVideoInfo, applyUserActionList, getDeviceId, normalizeVideoList } from '@/utils/format'
+import { clearAuthSession } from '@/utils/auth'
 import { fetchRelatedVideos } from '@/utils/videoList'
 import {
   addWatchHistory,
@@ -167,11 +169,13 @@ const showLogin = ref(false)
 const onlineCount = ref(0)
 const danmuList = ref([])
 const followed = ref(false)
+const playerRef = ref(null)
+const sendingDanmu = ref(false)
 let onlineTimer = null
 
 const interactionFlags = computed(() => String(videoInfo.value?.interaction || '').split(',').filter(Boolean))
-const closeDanmu = computed(() => interactionFlags.value.includes('0'))
-const closeComment = computed(() => interactionFlags.value.includes('1'))
+const closeDanmu = computed(() => interactionFlags.value.includes('1'))
+const closeComment = computed(() => interactionFlags.value.includes('0'))
 const tagList = computed(() =>
   String(videoInfo.value?.tags || '')
     .split(',')
@@ -300,15 +304,12 @@ async function doVideoAction(actionType) {
 }
 
 async function loadDanmu() {
-  if (!videoId.value || closeDanmu.value) {
+  if (!videoId.value || !currentFileId.value || closeDanmu.value) {
     danmuList.value = []
     return
   }
   try {
-    const data = new FormData()
-    data.append('videoId', videoId.value)
-    data.append('fileId', currentFileId.value || '')
-    const res = await danmuApi.loadDanmu(data)
+    const res = await danmuApi.loadDanmu(currentFileId.value, videoId.value)
     const payload = res.data || []
     danmuList.value = Array.isArray(payload) ? payload : payload.list || []
   } catch {
@@ -317,22 +318,54 @@ async function loadDanmu() {
 }
 
 async function sendDanmu(payload) {
-  if (!requireLogin()) return
+  if (sendingDanmu.value) return
+  if (!currentFileId.value) {
+    playerRef.value?.resetDanmuSending?.()
+    alert('当前分P未就绪，请稍后再发弹幕')
+    return
+  }
+  if (closeDanmu.value) {
+    playerRef.value?.resetDanmuSending?.()
+    alert('UP主已关闭弹幕')
+    return
+  }
+  sendingDanmu.value = true
   try {
+    const authed = await userStore.ensureAuth()
+    if (!authed) {
+      showLogin.value = true
+      return
+    }
     const data = new FormData()
     data.append('videoId', videoId.value)
-    data.append('fileId', currentFileId.value || '')
+    data.append('fileId', currentFileId.value)
     data.append('text', payload.text)
     data.append('time', String(Math.floor(payload.time || 0)))
     data.append('color', '16777215')
     data.append('mode', '0')
     await danmuApi.postDanmu(data)
-    danmuList.value = [
-      ...danmuList.value,
-      { danmuId: `local-${Date.now()}`, text: payload.text, time: payload.time }
-    ]
-  } catch {
-    // ignore when danmu API is unavailable
+    const item = {
+      danmuId: `local-${Date.now()}`,
+      text: payload.text,
+      time: Math.floor(payload.time || 0),
+      color: '16777215',
+      mode: 0
+    }
+    danmuList.value = [...danmuList.value, item]
+    if (videoInfo.value) {
+      videoInfo.value.danmuCount = Number(videoInfo.value.danmuCount || 0) + 1
+    }
+  } catch (e) {
+    const msg = e?.message || '弹幕发送失败'
+    if (/901|登录|token/i.test(msg)) {
+      userStore.userInfo = null
+      clearAuthSession()
+      showLogin.value = true
+    }
+    alert(msg)
+  } finally {
+    sendingDanmu.value = false
+    playerRef.value?.resetDanmuSending?.()
   }
 }
 

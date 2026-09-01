@@ -1,3 +1,46 @@
+const TOKEN_KEY = 'vidjoy_token'
+
+export function saveToken(token) {
+  if (token) {
+    localStorage.setItem(TOKEN_KEY, String(token))
+  } else {
+    localStorage.removeItem(TOKEN_KEY)
+  }
+}
+
+export function loadToken() {
+  try {
+    return localStorage.getItem(TOKEN_KEY) || ''
+  } catch {
+    return ''
+  }
+}
+
+export function clearToken() {
+  localStorage.removeItem(TOKEN_KEY)
+}
+
+export function clearAuthSession() {
+  clearUserInfo()
+  clearToken()
+}
+
+/** 保存 login / autoLogin 返回的 TokenUserInfoDto */
+export function saveAuthSession(data) {
+  if (!data || typeof data !== 'object') {
+    clearAuthSession()
+    return null
+  }
+  if (data.token) saveToken(data.token)
+  const user = normalizeUserInfo(data)
+  if (user) {
+    saveUserInfo(user)
+    return user
+  }
+  clearAuthSession()
+  return null
+}
+
 export function normalizeUserInfo(data) {
   if (!data) return null
 
@@ -45,3 +88,5 @@ export function saveUserInfo(info) {
 export function clearUserInfo() {
   localStorage.removeItem('userInfo')
 }
+
+export { TOKEN_KEY }

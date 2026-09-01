@@ -51,6 +51,7 @@ const danmuLayerRef = ref(null)
 const danmuText = ref('')
 const currentTime = ref(0)
 const activeDanmu = ref([])
+const sendingDanmu = ref(false)
 let hls = null
 let danmuId = 0
 
@@ -95,11 +96,16 @@ function onTimeUpdate() {
 function onPlay() {}
 function onPause() {}
 
+function shouldShowDanmuAtTime(d, time) {
+  const t = Number(d.time)
+  if (!Number.isFinite(t)) return false
+  const floored = Math.floor(time)
+  return Math.abs(t - time) < 0.5 || t === floored
+}
+
 function showDanmuAtTime(time) {
-  const tolerance = 0.5
   props.danmuList.forEach((d) => {
-    const t = Number(d.time)
-    if (Math.abs(t - time) < tolerance) {
+    if (shouldShowDanmuAtTime(d, time)) {
       const exists = activeDanmu.value.some((a) => a.rawId === d.danmuId)
       if (!exists) addDanmuToScreen(d)
     }
@@ -127,7 +133,8 @@ function addDanmuToScreen(d) {
 }
 
 function sendDanmu() {
-  if (!danmuText.value.trim()) return
+  if (!danmuText.value.trim() || sendingDanmu.value) return
+  sendingDanmu.value = true
   emit('send-danmu', {
     text: danmuText.value.trim(),
     time: currentTime.value
@@ -136,11 +143,18 @@ function sendDanmu() {
 }
 
 watch(() => props.src, initPlayer)
+watch(
+  () => props.danmuList,
+  () => {
+    if (currentTime.value > 0) showDanmuAtTime(currentTime.value)
+  },
+  { deep: true }
+)
 
 onMounted(initPlayer)
 onUnmounted(destroyPlayer)
 
-defineExpose({ videoRef, currentTime })
+defineExpose({ videoRef, currentTime, resetDanmuSending: () => { sendingDanmu.value = false } })
 </script>
 
 <style scoped lang="scss">
