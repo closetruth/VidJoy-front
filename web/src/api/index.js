@@ -41,7 +41,16 @@ export const danmuApi = {
 }
 
 export const userActionApi = {
-  doAction: (data) => request.post('/userAction/doAction', data)
+  doAction: (data) => request.post('/userAction/doAction', data),
+  /** 视频点赞 / 收藏 / 投币，commentId 固定传 0 */
+  doVideoAction: (videoId, actionType, actionCount = 1, commentId = 0) => {
+    const data = new FormData()
+    data.append('videoId', videoId)
+    data.append('actionType', String(actionType))
+    data.append('actionCount', String(actionCount))
+    data.append('commentId', String(commentId ?? 0))
+    return request.post('/userAction/doAction', data)
+  }
 }
 
 export const historyApi = {

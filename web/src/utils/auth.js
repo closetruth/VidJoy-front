@@ -57,7 +57,8 @@ export function normalizeUserInfo(data) {
     userId: String(userId),
     nickName: data.nickName ?? data.nick_name ?? data.nickname ?? '',
     avatar: data.avatar ?? data.userAvatar ?? data.avatarUrl ?? '',
-    email: data.email ?? ''
+    email: data.email ?? '',
+    currentCoin: Number(data.currentCoin ?? data.current_coin ?? 0) || 0
   }
 }
 

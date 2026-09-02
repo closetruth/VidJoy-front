@@ -219,7 +219,7 @@ async function likeComment(comment) {
   data.append('videoId', props.videoId)
   data.append('actionType', '0')
   data.append('actionCount', '1')
-  data.append('commentId', comment.commentId)
+  data.append('commentId', String(comment.commentId))
   await userActionApi.doAction(data)
   comment.likeCount = (comment.likeCount || 0) + 1
 }

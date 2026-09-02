@@ -71,6 +71,18 @@ export function toggleCollect(video) {
   return !exists
 }
 
+/** 与后端收藏状态同步到本地（个人中心收藏页暂无独立接口时使用） */
+export function setCollected(video, collected) {
+  if (!video?.videoId) return
+  const list = readList(COLLECT_KEY)
+  const exists = list.some((item) => item.videoId === video.videoId)
+  if (collected && !exists) {
+    writeList(COLLECT_KEY, [snapshot(video), ...list])
+  } else if (!collected && exists) {
+    writeList(COLLECT_KEY, list.filter((item) => item.videoId !== video.videoId))
+  }
+}
+
 export function isLiked(videoId) {
   return readList(LIKE_KEY).includes(videoId)
 }

@@ -105,15 +105,23 @@ export function unwrapVideoInfo(payload) {
   return normalizeVideoItem(info)
 }
 
-/** 2点赞 3投币 4收藏，与详情页 doAction 保持一致 */
+/** 与后端 UserActionTypeEnum 一致 */
+export const USER_ACTION_TYPE = {
+  COMMENT_LIKE: 0,
+  COMMENT_HATE: 1,
+  VIDEO_LIKE: 2,
+  VIDEO_COLLECT: 3,
+  VIDEO_COIN: 4
+}
+
 export function applyUserActionList(list) {
   const actions = { liked: false, coined: false, collected: false }
   if (!Array.isArray(list)) return actions
   for (const item of list) {
     const type = Number(item?.actionType ?? item?.action_type)
-    if (type === 2) actions.liked = true
-    if (type === 3) actions.coined = true
-    if (type === 4) actions.collected = true
+    if (type === USER_ACTION_TYPE.VIDEO_LIKE) actions.liked = true
+    if (type === USER_ACTION_TYPE.VIDEO_COLLECT) actions.collected = true
+    if (type === USER_ACTION_TYPE.VIDEO_COIN) actions.coined = true
   }
   return actions
 }

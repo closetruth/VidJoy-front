@@ -54,7 +54,12 @@
                 </svg>
                 <span>{{ formatCount(videoInfo.likeCount) }}</span>
               </button>
-              <button class="action-btn" :class="{ active: coined }" @click="toggleCoin">
+              <button
+                class="action-btn"
+                :class="{ active: coined, disabled: coinDisabled }"
+                :disabled="coinDisabled"
+                @click="openCoinDialog"
+              >
                 <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor">
                   <circle cx="12" cy="12" r="10"/>
                 </svg>
@@ -129,6 +134,47 @@
     </template>
 
     <LoginDialog v-model:visible="showLogin" />
+
+    <Teleport to="body">
+      <Transition name="fade">
+        <div v-if="showCoinDialog" class="coin-mask" @click.self="closeCoinDialog">
+          <div class="coin-dialog">
+            <button class="coin-close" type="button" @click="closeCoinDialog">×</button>
+            <h3 class="coin-title">投币支持 UP 主</h3>
+            <p class="coin-balance">我的硬币：{{ userCoinBalance }}</p>
+            <p v-if="userCoinBalance <= 0" class="coin-tip">硬币不足，无法投币</p>
+            <div class="coin-options">
+              <button
+                type="button"
+                class="coin-option"
+                :class="{ active: coinAmount === 1 }"
+                :disabled="userCoinBalance < 1"
+                @click="coinAmount = 1"
+              >
+                1 硬币
+              </button>
+              <button
+                type="button"
+                class="coin-option"
+                :class="{ active: coinAmount === 2 }"
+                :disabled="userCoinBalance < 2"
+                @click="coinAmount = 2"
+              >
+                2 硬币
+              </button>
+            </div>
+            <button
+              type="button"
+              class="btn-primary coin-submit"
+              :disabled="coinSubmitDisabled"
+              @click="submitCoin"
+            >
+              {{ coinSubmitting ? '投币中...' : `确定投币 ${coinAmount} 枚` }}
+            </button>
+          </div>
+        </div>
+      </Transition>
+    </Teleport>
   </div>
 </template>
 
@@ -140,18 +186,11 @@ import CommentSection from '@/components/video/CommentSection.vue'
 import LoginDialog from '@/components/auth/LoginDialog.vue'
 import { useUserStore } from '@/stores'
 import { videoApi, fileApi, danmuApi, userActionApi, uhomeApi } from '@/api'
-import { formatCount, formatTime, formatDuration, getResourceUrl, unwrapVideoInfo, applyUserActionList, getDeviceId, normalizeVideoList } from '@/utils/format'
+import { formatCount, formatTime, formatDuration, getResourceUrl, unwrapVideoInfo, applyUserActionList, getDeviceId, normalizeVideoList, USER_ACTION_TYPE } from '@/utils/format'
 import { clearAuthSession } from '@/utils/auth'
 import { fetchRelatedVideos } from '@/utils/videoList'
-import {
-  addWatchHistory,
-  isCollected,
-  toggleCollect as toggleLocalCollect,
-  isLiked,
-  toggleLike as toggleLocalLike,
-  isCoined,
-  addCoin
-} from '@/utils/localInteract'
+import { addWatchHistory, setCollected, toggleLike as toggleLocalLike, toggleCollect as toggleLocalCollect, addCoin as addLocalCoin } from '@/utils/localInteract'
+import { isApiNotFoundError } from '@/utils/request'
 
 const route = useRoute()
 const userStore = useUserStore()
@@ -166,11 +205,15 @@ const liked = ref(false)
 const coined = ref(false)
 const collected = ref(false)
 const showLogin = ref(false)
+const showCoinDialog = ref(false)
+const coinAmount = ref(1)
+const coinSubmitting = ref(false)
 const onlineCount = ref(0)
 const danmuList = ref([])
 const followed = ref(false)
 const playerRef = ref(null)
 const sendingDanmu = ref(false)
+const actionLoading = ref(false)
 let onlineTimer = null
 
 const interactionFlags = computed(() => String(videoInfo.value?.interaction || '').split(',').filter(Boolean))
@@ -181,6 +224,22 @@ const tagList = computed(() =>
     .split(',')
     .map((t) => t.trim())
     .filter(Boolean)
+)
+
+const isOwnVideo = computed(() => {
+  const uid = userStore.userInfo?.userId
+  return Boolean(uid && videoInfo.value?.userId === uid)
+})
+
+const userCoinBalance = computed(() => {
+  const n = Number(userStore.userInfo?.currentCoin)
+  return Number.isFinite(n) && n >= 0 ? n : 0
+})
+
+const coinDisabled = computed(() => coined.value || isOwnVideo.value)
+
+const coinSubmitDisabled = computed(
+  () => coinSubmitting.value || userCoinBalance.value < coinAmount.value
 )
 
 const videoSrc = computed(() => {
@@ -204,11 +263,21 @@ async function loadVideoPList() {
   currentFileId.value = episodes.value[0]?.fileId || ''
 }
 
-function applyLocalActions(info) {
-  const id = info?.videoId
-  liked.value = isLiked(id)
-  coined.value = isCoined(id)
-  collected.value = isCollected(id)
+function applyUserActionsFromPayload(payload) {
+  const actions = applyUserActionList(payload?.userActionList)
+  liked.value = actions.liked
+  coined.value = actions.coined
+  collected.value = actions.collected
+}
+
+async function refreshUserActions() {
+  if (!videoId.value) return
+  try {
+    const res = await videoApi.getVideoInfo(videoId.value)
+    applyUserActionsFromPayload(res.data || {})
+  } catch {
+    // ignore
+  }
 }
 
 async function loadVideo() {
@@ -224,11 +293,7 @@ async function loadVideo() {
     const res = await videoApi.getVideoInfo(videoId.value)
     const payload = res.data || {}
     videoInfo.value = unwrapVideoInfo(payload)
-    const actions = applyUserActionList(payload.userActionList)
-    applyLocalActions(videoInfo.value)
-    if (actions.liked) liked.value = true
-    if (actions.coined) coined.value = true
-    if (actions.collected) collected.value = true
+    applyUserActionsFromPayload(payload)
     followed.value = Boolean(payload.haveFocus || videoInfo.value.haveFocus)
 
     addWatchHistory(videoInfo.value)
@@ -294,13 +359,8 @@ function requireLogin() {
   return false
 }
 
-async function doVideoAction(actionType) {
-  const data = new FormData()
-  data.append('videoId', videoId.value)
-  data.append('actionType', String(actionType))
-  data.append('actionCount', '1')
-  data.append('commentId', '')
-  await userActionApi.doAction(data)
+async function doVideoAction(actionType, actionCount = 1) {
+  await userActionApi.doVideoAction(videoId.value, actionType, actionCount)
 }
 
 async function loadDanmu() {
@@ -380,51 +440,130 @@ async function toggleFollow() {
   }
 }
 
-function toggleLike() {
-  if (!requireLogin() || !videoInfo.value) return
+async function toggleLike() {
+  if (!videoInfo.value || actionLoading.value) return
+  const authed = await userStore.ensureAuth()
+  if (!authed) {
+    showLogin.value = true
+    return
+  }
   const next = !liked.value
-  doVideoAction(2)
-    .then(() => {
-      liked.value = next
-      videoInfo.value.likeCount = Math.max(0, Number(videoInfo.value.likeCount || 0) + (next ? 1 : -1))
-    })
-    .catch(() => {
+  actionLoading.value = true
+  try {
+    await doVideoAction(USER_ACTION_TYPE.VIDEO_LIKE)
+    liked.value = next
+    videoInfo.value.likeCount = Math.max(0, Number(videoInfo.value.likeCount || 0) + (next ? 1 : -1))
+  } catch (e) {
+    if (isApiNotFoundError(e)) {
       liked.value = toggleLocalLike(videoInfo.value.videoId)
       const delta = liked.value ? 1 : -1
       videoInfo.value.likeCount = Math.max(0, Number(videoInfo.value.likeCount || 0) + delta)
-    })
+      return
+    }
+    const msg = e?.message || '操作失败'
+    if (/901|登录|token/i.test(msg)) {
+      userStore.userInfo = null
+      clearAuthSession()
+      showLogin.value = true
+    }
+    alert(msg)
+  } finally {
+    actionLoading.value = false
+  }
 }
 
-function toggleCoin() {
-  if (!requireLogin() || !videoInfo.value) return
+function closeCoinDialog() {
+  showCoinDialog.value = false
+  coinAmount.value = 1
+}
+
+async function openCoinDialog() {
+  if (!videoInfo.value || coinDisabled.value || actionLoading.value) return
+  if (isOwnVideo.value) {
+    alert('不能给自己的视频投币')
+    return
+  }
   if (coined.value) return
-  doVideoAction(3)
-    .then(() => {
-      coined.value = true
-      videoInfo.value.coinCount = Number(videoInfo.value.coinCount || 0) + 1
-    })
-    .catch(() => {
-      if (addCoin(videoInfo.value.videoId)) {
-        coined.value = true
-        videoInfo.value.coinCount = Number(videoInfo.value.coinCount || 0) + 1
-      }
-    })
+  const authed = await userStore.ensureAuth()
+  if (!authed) {
+    showLogin.value = true
+    return
+  }
+  coinAmount.value = userCoinBalance.value >= 2 ? 2 : 1
+  showCoinDialog.value = true
 }
 
-function toggleCollect() {
-  if (!requireLogin() || !videoInfo.value) return
+function applyCoinSuccess(amount) {
+  coined.value = true
+  videoInfo.value.coinCount = Number(videoInfo.value.coinCount || 0) + amount
+  if (userStore.userInfo) {
+    userStore.userInfo.currentCoin = Math.max(0, userCoinBalance.value - amount)
+  }
+  closeCoinDialog()
+}
+
+async function submitCoin() {
+  if (!videoInfo.value || coined.value || coinSubmitDisabled.value) return
+  coinSubmitting.value = true
+  try {
+    await doVideoAction(USER_ACTION_TYPE.VIDEO_COIN, coinAmount.value)
+    applyCoinSuccess(coinAmount.value)
+  } catch (e) {
+    if (isApiNotFoundError(e)) {
+      if (addLocalCoin(videoInfo.value.videoId)) {
+        applyCoinSuccess(coinAmount.value)
+      }
+      return
+    }
+    const msg = e?.message || '投币失败'
+    if (/901|登录|token/i.test(msg)) {
+      userStore.userInfo = null
+      clearAuthSession()
+      closeCoinDialog()
+      showLogin.value = true
+    } else if (/已经用完|已投|600/.test(msg)) {
+      coined.value = true
+      closeCoinDialog()
+    } else {
+      alert(msg)
+    }
+  } finally {
+    coinSubmitting.value = false
+  }
+}
+
+async function toggleCollect() {
+  if (!videoInfo.value || actionLoading.value) return
+  const authed = await userStore.ensureAuth()
+  if (!authed) {
+    showLogin.value = true
+    return
+  }
   const next = !collected.value
-  doVideoAction(4)
-    .then(() => {
-      collected.value = next
-      videoInfo.value.collectCount = Math.max(0, Number(videoInfo.value.collectCount || 0) + (next ? 1 : -1))
-      toggleLocalCollect(videoInfo.value)
-    })
-    .catch(() => {
+  actionLoading.value = true
+  try {
+    await doVideoAction(USER_ACTION_TYPE.VIDEO_COLLECT)
+    collected.value = next
+    videoInfo.value.collectCount = Math.max(0, Number(videoInfo.value.collectCount || 0) + (next ? 1 : -1))
+    setCollected(videoInfo.value, next)
+  } catch (e) {
+    if (isApiNotFoundError(e)) {
       collected.value = toggleLocalCollect(videoInfo.value)
       const delta = collected.value ? 1 : -1
       videoInfo.value.collectCount = Math.max(0, Number(videoInfo.value.collectCount || 0) + delta)
-    })
+      setCollected(videoInfo.value, collected.value)
+      return
+    }
+    const msg = e?.message || '收藏失败'
+    if (/901|登录|token/i.test(msg)) {
+      userStore.userInfo = null
+      clearAuthSession()
+      showLogin.value = true
+    }
+    alert(msg)
+  } finally {
+    actionLoading.value = false
+  }
 }
 
 function shareVideo() {
@@ -433,6 +572,12 @@ function shareVideo() {
 }
 
 watch(videoId, loadVideo)
+watch(
+  () => userStore.isLoggedIn,
+  (loggedIn) => {
+    if (loggedIn && videoInfo.value) refreshUserActions()
+  }
+)
 onMounted(loadVideo)
 onUnmounted(stopOnlineReport)
 </script>
@@ -583,10 +728,111 @@ onUnmounted(stopOnlineReport)
   font-size: 12px;
   transition: color 0.2s;
 
-  &:hover,
+  &:hover:not(:disabled),
   &.active {
     color: var(--bili-pink);
   }
+
+  &.disabled,
+  &:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+  }
+}
+
+.coin-mask {
+  position: fixed;
+  inset: 0;
+  z-index: 2000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.45);
+}
+
+.coin-dialog {
+  position: relative;
+  width: min(360px, calc(100vw - 32px));
+  padding: 24px;
+  border-radius: var(--bili-radius);
+  background: #fff;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.18);
+}
+
+.coin-close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 28px;
+  height: 28px;
+  border: none;
+  background: transparent;
+  color: var(--bili-text-tertiary);
+  font-size: 22px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.coin-title {
+  margin: 0 0 8px;
+  font-size: 18px;
+  color: var(--bili-text);
+}
+
+.coin-balance {
+  margin: 0 0 20px;
+  font-size: 14px;
+  color: var(--bili-text-secondary);
+}
+
+.coin-tip {
+  margin: -12px 0 16px;
+  font-size: 13px;
+  color: #e6a23c;
+}
+
+.coin-options {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.coin-option {
+  height: 44px;
+  border: 1px solid var(--bili-border);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--bili-text);
+  font-size: 15px;
+  cursor: pointer;
+  transition: all 0.2s;
+
+  &.active {
+    border-color: var(--bili-pink);
+    color: var(--bili-pink);
+    background: rgba(251, 114, 153, 0.08);
+  }
+
+  &:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+}
+
+.coin-submit {
+  width: 100%;
+  height: 40px;
+}
+
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.2s ease;
+}
+
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
 }
 
 .sidebar {

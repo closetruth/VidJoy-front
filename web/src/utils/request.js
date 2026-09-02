@@ -28,6 +28,30 @@ function isSuccess(res) {
   return false
 }
 
+function getErrorMessage(error) {
+  const status = error.response?.status
+  const data = error.response?.data
+  if (status === 404) {
+    return data?.info || '用户行为接口未就绪(404)，请在 IDEA 中重新编译并启动 easylive-web'
+  }
+  return data?.info || data?.msg || data?.message || error.message || '网络错误'
+}
+
+function createRequestError(error) {
+  const reqError = new Error(getErrorMessage(error))
+  reqError.status = error.response?.status
+  reqError.isNotFound = error.response?.status === 404
+  return reqError
+}
+
+export function isApiNotFoundError(error) {
+  return Boolean(
+    error?.isNotFound ||
+    error?.status === 404 ||
+    /404|接口未就绪|Not Found/i.test(error?.message || '')
+  )
+}
+
 request.interceptors.response.use(
   (response) => {
     const res = response.data
@@ -35,12 +59,12 @@ request.interceptors.response.use(
       clearAuthSession()
     }
     if (isSuccess(res)) return res
-    return Promise.reject(new Error(res.info || res.msg || res.message || '请求失败'))
+    const bizError = new Error(res.info || res.msg || res.message || '请求失败')
+    bizError.code = res.code
+    bizError.isNotFound = res.code === 404
+    return Promise.reject(bizError)
   },
-  (error) => {
-    const msg = error.response?.data?.info || error.response?.data?.msg || error.message || '网络错误'
-    return Promise.reject(new Error(msg))
-  }
+  (error) => Promise.reject(createRequestError(error))
 )
 
 export default request
