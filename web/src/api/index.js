@@ -27,11 +27,28 @@ export const videoApi = {
 }
 
 export const commentApi = {
+  /** 后端返回 VideoCommentResultVO { commentData, userActionList } */
   loadComment: (data) => request.post('/comment/loadComment', data),
+  /** FormData: videoId, content, replyCommentId?(仅回复时), imgPath? */
   postComment: (data) => request.post('/comment/postComment', data),
-  userDelComment: (commentId) => request.post('/comment/userDelComment', { commentId }),
-  topComment: (commentId) => request.post('/comment/topComment', { commentId }),
-  cancelTopComment: (commentId) => request.post('/comment/cancelTopComment', { commentId })
+  /** FormData: commentId — 仅视频 UP 主；后端路径为 /comment/TopComment */
+  topComment: (commentId) => {
+    const data = new FormData()
+    data.append('commentId', String(commentId))
+    return request.post('/comment/TopComment', data)
+  },
+  /** FormData: commentId — 仅视频 UP 主 */
+  cancelTopComment: (commentId) => {
+    const data = new FormData()
+    data.append('commentId', String(commentId))
+    return request.post('/comment/cancelTopComment', data)
+  },
+  /** FormData: commentId — 评论作者或视频 UP 主 */
+  userDelComment: (commentId) => {
+    const data = new FormData()
+    data.append('commentId', String(commentId))
+    return request.post('/comment/userDelComment', data)
+  }
 }
 
 export const danmuApi = {
@@ -42,12 +59,14 @@ export const danmuApi = {
 
 export const userActionApi = {
   doAction: (data) => request.post('/userAction/doAction', data),
-  /** 视频点赞 / 收藏 / 投币，commentId 固定传 0 */
+  /**
+   * 用户行为：视频赞/藏/币 commentId 传 0；评论赞传真实 commentId，actionType=0
+   */
   doVideoAction: (videoId, actionType, actionCount = 1, commentId = 0) => {
     const data = new FormData()
     data.append('videoId', videoId)
     data.append('actionType', String(actionType))
-    data.append('actionCount', String(actionCount))
+    data.append('actionCount', String(actionCount ?? 1))
     data.append('commentId', String(commentId ?? 0))
     return request.post('/userAction/doAction', data)
   }
