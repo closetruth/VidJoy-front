@@ -44,7 +44,7 @@
                 {{ formatCount(videoInfo.danmuCount) }}
               </span>
               <span>{{ formatTime(videoInfo.createTime) }}</span>
-              <span v-if="onlineCount > 0">{{ onlineCount }} 人在看</span>
+              <span v-if="onlineCount > 0" class="online-count">{{ onlineCount }} 人在看</span>
             </div>
 
             <div class="action-bar">
@@ -330,12 +330,13 @@ async function reportOnline() {
     const n = Number(res?.data)
     if (Number.isFinite(n) && n >= 0) onlineCount.value = n
   } catch {
-    // 接口暂返回 null 时忽略
+    // 心跳失败不打断播放
   }
 }
 
 function startOnlineReport() {
   stopOnlineReport()
+  if (!videoId.value) return
   reportOnline()
   onlineTimer = setInterval(reportOnline, 5000)
 }
@@ -676,6 +677,11 @@ onUnmounted(stopOnlineReport)
     display: flex;
     align-items: center;
     gap: 4px;
+  }
+
+  .online-count {
+    color: var(--bili-pink);
+    font-weight: 500;
   }
 }
 

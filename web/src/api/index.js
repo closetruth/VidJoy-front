@@ -18,8 +18,13 @@ export const videoApi = {
   loadVideo: (params) => request.get('/video/loadVideo', { params }),
   getVideoInfo: (videoId) => request.get('/video/getVideoInfo', { params: { videoId } }),
   loadVideoPList: (videoId) => request.get('/video/loadVideoPList', { params: { videoId } }),
-  reportVideoPlayOnline: (videoId, deviceId) =>
-    request.get('/video/reportVideoPlayOnline', { params: { videoId, deviceId } }),
+  /** 在线人数心跳：与后端一致传 videoId + deviceId，约每 5s 上报 */
+  reportVideoPlayOnline: (videoId, deviceId) => {
+    const data = new FormData()
+    data.append('videoId', videoId)
+    data.append('deviceId', deviceId)
+    return request.post('/video/reportVideoPlayOnline', data)
+  },
   search: (data) => request.post('/video/search', data),
   getSearchKeywordTop: () => request.post('/video/getSearchKeywordTop'),
   getVideoRecommend: (videoId) => request.post('/video/getVideoRecommend', null, { params: { videoId } }),
