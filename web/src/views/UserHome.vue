@@ -7,8 +7,24 @@
           <h1 class="nickname">{{ displayName }}</h1>
           <p class="intro">{{ userInfo?.personIntroduction || '这个人很懒，什么都没写' }}</p>
           <div class="user-stats">
-            <span><strong>{{ formatCount(userInfo?.focusCount) }}</strong> 关注</span>
-            <span><strong>{{ formatCount(userInfo?.fansCount) }}</strong> 粉丝</span>
+            <button
+              v-if="isSelf"
+              type="button"
+              class="stat-btn"
+              @click="$router.push('/account/follow?tab=focus')"
+            >
+              <strong>{{ formatCount(userInfo?.focusCount) }}</strong> 关注
+            </button>
+            <span v-else><strong>{{ formatCount(userInfo?.focusCount) }}</strong> 关注</span>
+            <button
+              v-if="isSelf"
+              type="button"
+              class="stat-btn"
+              @click="$router.push('/account/follow?tab=fans')"
+            >
+              <strong>{{ formatCount(userInfo?.fansCount) }}</strong> 粉丝
+            </button>
+            <span v-else><strong>{{ formatCount(userInfo?.fansCount) }}</strong> 粉丝</span>
             <span><strong>{{ formatCount(videoList.length) }}</strong> 投稿</span>
           </div>
         </div>
@@ -43,7 +59,7 @@ import { useRoute } from 'vue-router'
 import VideoCard from '@/components/video/VideoCard.vue'
 import { useUserStore } from '@/stores'
 import { uhomeApi } from '@/api'
-import { formatCount, getResourceUrl, normalizeVideoList } from '@/utils/format'
+import { formatCount, getResourceUrl, normalizeVideoList, getUserThemeGradient } from '@/utils/format'
 import { fetchPublicVideoPages } from '@/utils/videoList'
 
 const route = useRoute()
@@ -55,6 +71,7 @@ const videoList = ref([])
 const collectionList = ref([])
 const loading = ref(true)
 const followed = ref(false)
+const following = ref(false)
 const tab = ref('video')
 
 const displayName = computed(() => userInfo.value?.nickName || videoList.value[0]?.nickName || '用户')
@@ -63,10 +80,11 @@ const avatarUrl = computed(() => {
     || 'https://i0.hdslb.com/bfs/face/member/face/placeholder.jpg'
 })
 const bannerStyle = computed(() => ({
-  background: 'linear-gradient(135deg, #fb7299 0%, #ff9db5 100%)'
+  background: getUserThemeGradient(userInfo.value?.theme)
 }))
+const isSelf = computed(() => userStore.userInfo?.userId && String(userStore.userInfo.userId) === userId.value)
 const showFollowBtn = computed(() => {
-  return userStore.isLoggedIn && userStore.userInfo?.userId !== userId.value
+  return userStore.isLoggedIn && !isSelf.value
 })
 const displayList = computed(() => (tab.value === 'video' ? videoList.value : collectionList.value))
 
@@ -111,12 +129,27 @@ async function loadUser() {
 }
 
 async function toggleFollow() {
-  if (followed.value) {
-    await uhomeApi.cancelFocus(userId.value)
-  } else {
-    await uhomeApi.focus(userId.value)
+  if (following.value) return
+  following.value = true
+  try {
+    if (followed.value) {
+      await uhomeApi.cancelFocus(userId.value)
+      followed.value = false
+      if (userInfo.value) {
+        userInfo.value.fansCount = Math.max(0, Number(userInfo.value.fansCount || 0) - 1)
+      }
+    } else {
+      await uhomeApi.focus(userId.value)
+      followed.value = true
+      if (userInfo.value) {
+        userInfo.value.fansCount = Number(userInfo.value.fansCount || 0) + 1
+      }
+    }
+  } catch (e) {
+    alert(e?.message || '操作失败')
+  } finally {
+    following.value = false
   }
-  followed.value = !followed.value
 }
 
 watch(userId, loadUser)
@@ -169,6 +202,16 @@ onMounted(loadUser)
   strong {
     font-size: 16px;
     margin-right: 4px;
+  }
+
+  .stat-btn {
+    color: inherit;
+    font-size: inherit;
+
+    &:hover {
+      opacity: 0.85;
+      text-decoration: underline;
+    }
   }
 }
 

@@ -36,6 +36,24 @@
         <label>空间公告</label>
         <textarea v-model="form.noticeInfo" rows="3" placeholder="空间公告" />
       </div>
+      <div class="form-item">
+        <label>空间主题</label>
+        <div class="theme-grid">
+          <button
+            v-for="item in USER_THEME_PRESETS"
+            :key="item.id"
+            type="button"
+            class="theme-swatch"
+            :class="{ active: theme === item.id }"
+            :style="{ background: item.gradient }"
+            :title="item.name"
+            @click="selectTheme(item.id)"
+          >
+            <span class="theme-name">{{ item.name }}</span>
+          </button>
+        </div>
+        <p v-if="themeMsg" class="theme-msg">{{ themeMsg }}</p>
+      </div>
       <p v-if="msg" class="msg" :class="{ error: isError }">{{ msg }}</p>
       <button type="submit" class="btn-primary" :disabled="saving">
         {{ saving ? '保存中...' : '保存修改' }}
@@ -48,13 +66,16 @@
 import { ref, reactive, computed, onMounted } from 'vue'
 import { useUserStore } from '@/stores'
 import { uhomeApi, fileApi } from '@/api'
-import { getResourceUrl } from '@/utils/format'
+import { getResourceUrl, USER_THEME_PRESETS } from '@/utils/format'
 
 const userStore = useUserStore()
 const saving = ref(false)
 const msg = ref('')
 const isError = ref(false)
 const avatarPath = ref('')
+const theme = ref(1)
+const themeMsg = ref('')
+const themeSaving = ref(false)
 
 const form = reactive({
   nickName: '',
@@ -79,6 +100,7 @@ function fillForm(info) {
   form.personIntroduction = info.personIntroduction || ''
   form.noticeInfo = info.noticeInfo || ''
   avatarPath.value = info.avatar || ''
+  theme.value = Number(info.theme) || 1
 }
 
 async function loadInfo() {
@@ -88,6 +110,26 @@ async function loadInfo() {
     fillForm(res.data)
   } catch {
     fillForm(userStore.userInfo)
+  }
+}
+
+async function selectTheme(id) {
+  if (themeSaving.value || theme.value === id) return
+  const prev = theme.value
+  theme.value = id
+  themeSaving.value = true
+  themeMsg.value = ''
+  try {
+    await uhomeApi.saveTheme(id)
+    themeMsg.value = '主题已保存'
+    if (userStore.userInfo) {
+      userStore.setUser({ ...userStore.userInfo, theme: id })
+    }
+  } catch (e) {
+    theme.value = prev
+    themeMsg.value = e?.message || '主题保存失败'
+  } finally {
+    themeSaving.value = false
   }
 }
 
@@ -178,6 +220,43 @@ onMounted(loadInfo)
   }
 }
 
+.theme-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 8px;
+}
+
+.theme-swatch {
+  position: relative;
+  height: 48px;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 2px solid transparent;
+
+  &.active {
+    border-color: #fff;
+    box-shadow: 0 0 0 2px var(--bili-pink);
+  }
+
+  .theme-name {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    padding: 2px 4px;
+    font-size: 11px;
+    color: #fff;
+    background: rgba(0, 0, 0, 0.35);
+    text-align: center;
+  }
+}
+
+.theme-msg {
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--bili-text-tertiary);
+}
+
 .msg {
   font-size: 13px;
   color: #00b42a;
@@ -190,5 +269,11 @@ onMounted(loadInfo)
 
 .btn-primary {
   min-width: 120px;
+}
+
+@media (max-width: 640px) {
+  .theme-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
 }
 </style>

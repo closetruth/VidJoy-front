@@ -18,13 +18,9 @@ export const videoApi = {
   loadVideo: (params) => request.get('/video/loadVideo', { params }),
   getVideoInfo: (videoId) => request.get('/video/getVideoInfo', { params: { videoId } }),
   loadVideoPList: (videoId) => request.get('/video/loadVideoPList', { params: { videoId } }),
-  /** 在线人数心跳：与后端一致传 videoId + deviceId，约每 5s 上报 */
-  reportVideoPlayOnline: (videoId, deviceId) => {
-    const data = new FormData()
-    data.append('videoId', videoId)
-    data.append('deviceId', deviceId)
-    return request.post('/video/reportVideoPlayOnline', data)
-  },
+  /** 在线人数心跳：后端 @RequestMapping，GET 传 videoId + deviceId */
+  reportVideoPlayOnline: (videoId, deviceId) =>
+    request.get('/video/reportVideoPlayOnline', { params: { videoId, deviceId } }),
   search: (data) => request.post('/video/search', data),
   getSearchKeywordTop: () => request.post('/video/getSearchKeywordTop'),
   getVideoRecommend: (videoId) => request.post('/video/getVideoRecommend', null, { params: { videoId } }),
@@ -92,15 +88,29 @@ export const messageApi = {
 }
 
 export const uhomeApi = {
-  getUserInfo: (userId) => request.post('/uhome/getUserInfo', { userId }),
+  getUserInfo: (userId) => request.get('/uhome/getUserInfo', { params: { userId } }),
   loadVideoList: (data) => request.post('/uhome/loadVideoList', data),
   loadUserCollection: (data) => request.post('/uhome/loadUserCollection', data),
   updateUserInfo: (data) => request.post('/uhome/updateUserInfo', data),
-  focus: (userId) => request.post('/uhome/focus', { userId }),
-  cancelFocus: (userId) => request.post('/uhome/cancelFocus', { userId }),
-  loadFocusList: (data) => request.post('/uhome/loadFocusList', data),
-  loadFansList: (data) => request.post('/uhome/loadFansList', data),
-  saveTheme: (data) => request.post('/uhome/saveTheme', data),
+  focus: (focusUserId) => {
+    const data = new FormData()
+    data.append('focusUserId', String(focusUserId))
+    return request.post('/uhome/focus', data)
+  },
+  cancelFocus: (focusUserId) => {
+    const data = new FormData()
+    data.append('focusUserId', String(focusUserId))
+    return request.post('/uhome/cancelFocus', data)
+  },
+  loadFocusList: (pageNo = 1) =>
+    request.get('/uhome/loadFocusList', { params: { pageNo } }),
+  loadFansList: (pageNo = 1) =>
+    request.get('/uhome/loadFansList', { params: { pageNo } }),
+  saveTheme: (theme) => {
+    const data = new FormData()
+    data.append('theme', String(theme))
+    return request.post('/uhome/saveTheme', data)
+  },
   loadVideoSeries: (data) => request.post('/uhome/series/loadVideoSeries', data),
   loadAllVideo: (data) => request.post('/uhome/series/loadAllVideo', data),
   changeVideoSeriesSort: (data) => request.post('/uhome/series/changeVideoSeriesSort', data),

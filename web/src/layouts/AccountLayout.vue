@@ -47,6 +47,7 @@ const menuItems = computed(() => [
   { path: '/account/home', title: '概览', icon: '🏠' },
   { path: '/account/videos', title: '我的投稿', icon: '🎬' },
   { path: '/account/collection', title: '我的收藏', icon: '⭐' },
+  { path: '/account/follow', title: '关注粉丝', icon: '👥' },
   { path: '/account/history', title: '历史记录', icon: '🕐' },
   { path: '/account/message', title: '我的消息', icon: '💬' },
   { path: '/account/settings', title: '账号设置', icon: '⚙️' }

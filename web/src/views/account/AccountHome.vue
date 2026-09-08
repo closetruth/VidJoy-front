@@ -5,11 +5,11 @@
         <span class="num">{{ formatCount(countInfo.allCount || countInfo.videoCount) }}</span>
         <span class="label">投稿</span>
       </div>
-      <div class="stat-item">
+      <div class="stat-item link" @click="$router.push('/account/follow?tab=fans')">
         <span class="num">{{ formatCount(countInfo.fansCount) }}</span>
         <span class="label">粉丝</span>
       </div>
-      <div class="stat-item">
+      <div class="stat-item link" @click="$router.push('/account/follow?tab=focus')">
         <span class="num">{{ formatCount(countInfo.focusCount) }}</span>
         <span class="label">关注</span>
       </div>
@@ -120,6 +120,15 @@ onMounted(loadData)
   .label {
     font-size: 13px;
     color: var(--bili-text-tertiary);
+  }
+
+  &.link {
+    cursor: pointer;
+    transition: transform 0.15s;
+
+    &:hover {
+      transform: translateY(-2px);
+    }
   }
 }
 

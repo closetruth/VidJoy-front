@@ -114,6 +114,26 @@ export const USER_ACTION_TYPE = {
   VIDEO_COIN: 4
 }
 
+/** 空间主题 1–10，对应后端 UserInfo.theme */
+export const USER_THEME_PRESETS = [
+  { id: 1, name: '樱花粉', gradient: 'linear-gradient(135deg, #fb7299 0%, #ff9db5 100%)' },
+  { id: 2, name: '天空蓝', gradient: 'linear-gradient(135deg, #00a1d6 0%, #6dd5fa 100%)' },
+  { id: 3, name: '薄荷绿', gradient: 'linear-gradient(135deg, #2ecc71 0%, #82e0aa 100%)' },
+  { id: 4, name: '暮光紫', gradient: 'linear-gradient(135deg, #8e44ad 0%, #c39bd3 100%)' },
+  { id: 5, name: '暖阳橙', gradient: 'linear-gradient(135deg, #e67e22 0%, #f5b041 100%)' },
+  { id: 6, name: '深夜灰', gradient: 'linear-gradient(135deg, #2c3e50 0%, #5d6d7e 100%)' },
+  { id: 7, name: '珊瑚红', gradient: 'linear-gradient(135deg, #e74c3c 0%, #f1948a 100%)' },
+  { id: 8, name: '青玉', gradient: 'linear-gradient(135deg, #16a085 0%, #48c9b0 100%)' },
+  { id: 9, name: '靛金', gradient: 'linear-gradient(135deg, #1a5276 0%, #f4d03f 100%)' },
+  { id: 10, name: '樱夜', gradient: 'linear-gradient(135deg, #4a235a 0%, #fb7299 100%)' }
+]
+
+export function getUserThemeGradient(theme) {
+  const id = Number(theme) || 1
+  const preset = USER_THEME_PRESETS.find((item) => item.id === id) || USER_THEME_PRESETS[0]
+  return preset.gradient
+}
+
 export function applyUserActionList(list) {
   const actions = { liked: false, coined: false, collected: false }
   if (!Array.isArray(list)) return actions

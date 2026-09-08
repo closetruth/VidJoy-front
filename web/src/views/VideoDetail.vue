@@ -327,16 +327,24 @@ async function reportOnline() {
   if (!videoId.value) return
   try {
     const res = await videoApi.reportVideoPlayOnline(videoId.value, getDeviceId())
-    const n = Number(res?.data)
-    if (Number.isFinite(n) && n >= 0) onlineCount.value = n
-  } catch {
-    // 心跳失败不打断播放
+    const raw = res?.data ?? res
+    const n = typeof raw === 'object' && raw !== null ? Number(raw.count ?? raw.onlineCount) : Number(raw)
+    // 接口正常返回人数则用服务端；否则至少显示自己在看
+    onlineCount.value = Number.isFinite(n) && n > 0 ? n : Math.max(onlineCount.value, 1)
+  } catch (e) {
+    // 后端 Redis 统计异常时仍展示本地在看，避免页面空白
+    onlineCount.value = Math.max(onlineCount.value, 1)
+    if (import.meta.env.DEV) {
+      console.warn('[online]', e?.message || e)
+    }
   }
 }
 
 function startOnlineReport() {
   stopOnlineReport()
   if (!videoId.value) return
+  // 先本地占位，避免等接口才出现
+  onlineCount.value = Math.max(onlineCount.value, 1)
   reportOnline()
   onlineTimer = setInterval(reportOnline, 5000)
 }
@@ -432,12 +440,16 @@ async function sendDanmu(payload) {
 
 async function toggleFollow() {
   if (!requireLogin() || !videoInfo.value) return
-  if (followed.value) {
-    await uhomeApi.cancelFocus(videoInfo.value.userId)
-    followed.value = false
-  } else {
-    await uhomeApi.focus(videoInfo.value.userId)
-    followed.value = true
+  try {
+    if (followed.value) {
+      await uhomeApi.cancelFocus(videoInfo.value.userId)
+      followed.value = false
+    } else {
+      await uhomeApi.focus(videoInfo.value.userId)
+      followed.value = true
+    }
+  } catch (e) {
+    alert(e?.message || '操作失败')
   }
 }
 
