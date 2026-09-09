@@ -90,7 +90,7 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useUserStore } from '@/stores'
-import { getResourceUrl } from '@/utils/format'
+import { getAvatarUrl } from '@/utils/format'
 import { videoApi } from '@/api'
 
 defineEmits(['open-login'])
@@ -102,10 +102,7 @@ const showSuggest = ref(false)
 const hotKeywords = ref([])
 const isScrolled = ref(false)
 
-const avatarUrl = computed(() => {
-  const avatar = userStore.userInfo?.avatar
-  return avatar ? getResourceUrl(avatar) : 'https://i0.hdslb.com/bfs/face/member/face/placeholder.jpg'
-})
+const avatarUrl = computed(() => getAvatarUrl(userStore.userInfo?.avatar))
 
 function handleSearch() {
   if (!keyword.value.trim()) return

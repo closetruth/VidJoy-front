@@ -58,18 +58,31 @@ export function normalizeResourcePath(sourceName) {
 }
 
 export function getResourceUrl(sourceName) {
-  if (!sourceName) return ''
-  if (sourceName.startsWith('http')) return sourceName
-  const path = normalizeResourcePath(sourceName)
+  if (sourceName == null || sourceName === '') return ''
+  const raw = String(sourceName).trim()
+  if (!raw || raw === 'null' || raw === 'undefined') return ''
+  if (raw.startsWith('http')) return raw
+  const path = normalizeResourcePath(raw)
   if (!path) return ''
   return `/api/file/getResource?sourceName=${encodeURIComponent(path)}`
+}
+
+/** 头像 URL，无图时用占位 */
+export function getAvatarUrl(sourceName) {
+  return (
+    getResourceUrl(sourceName) ||
+    'https://i0.hdslb.com/bfs/face/member/face/placeholder.jpg'
+  )
 }
 
 export function pickField(obj, ...keys) {
   if (!obj) return ''
   for (const key of keys) {
     const val = obj[key]
-    if (val != null && val !== '') return val
+    if (val == null) continue
+    const s = String(val).trim()
+    if (!s || s === 'null' || s === 'undefined') continue
+    return s
   }
   return ''
 }
@@ -77,6 +90,10 @@ export function pickField(obj, ...keys) {
 /** 列表接口返回的单条视频归一化 */
 export function normalizeVideoItem(item) {
   if (!item || typeof item !== 'object') return item
+  const userAvatar =
+    pickField(item, 'userAvatar', 'user_avatar', 'avatar') ||
+    pickField(item.userInfo, 'avatar', 'userAvatar') ||
+    pickField(item.user_info, 'avatar', 'userAvatar')
   return {
     ...item,
     videoId: pickField(item, 'videoId', 'video_id') || item.videoId,
@@ -84,7 +101,8 @@ export function normalizeVideoItem(item) {
     videoCover: pickField(item, 'videoCover', 'video_cover') || item.videoCover,
     nickName: pickField(item, 'nickName', 'nick_name') || item.nickName,
     userId: pickField(item, 'userId', 'user_id') || item.userId,
-    userAvatar: pickField(item, 'userAvatar', 'user_avatar', 'avatar') || item.userAvatar,
+    userAvatar,
+    avatar: userAvatar || pickField(item, 'avatar') || item.avatar,
     pCategoryId: pickField(item, 'pCategoryId', 'pcategoryId', 'p_category_id') || item.pCategoryId,
     playCount: pickField(item, 'playCount', 'play_count') || item.playCount || 0,
     danmuCount: pickField(item, 'danmuCount', 'danmu_count') || item.danmuCount || 0,
@@ -96,6 +114,25 @@ export function normalizeVideoList(payload) {
   if (Array.isArray(payload)) return payload.map(normalizeVideoItem)
   const list = payload?.list || payload?.records || []
   return list.map(normalizeVideoItem)
+}
+
+/** 分页结果拆包 */
+export function unwrapPagination(payload) {
+  if (Array.isArray(payload)) {
+    const list = payload.map(normalizeVideoItem)
+    return { list, pageNo: 1, pageTotal: 1, totalCount: list.length, pageSize: list.length }
+  }
+  if (!payload || typeof payload !== 'object') {
+    return { list: [], pageNo: 1, pageTotal: 1, totalCount: 0, pageSize: 15 }
+  }
+  const list = normalizeVideoList(payload)
+  return {
+    list,
+    pageNo: Number(payload.pageNo ?? 1) || 1,
+    pageTotal: Number(payload.pageTotal ?? 1) || 1,
+    totalCount: Number(payload.totalCount ?? list.length) || 0,
+    pageSize: Number(payload.pageSize ?? 15) || 15
+  }
 }
 
 /** getVideoInfo 返回 VideoInfoResultVO { videoInfo, userActionList } */

@@ -4,6 +4,7 @@ import { accountApi, categoryApi, messageApi } from '@/api'
 import {
   loadUserInfo,
   saveAuthSession,
+  saveUserInfo,
   clearAuthSession,
   normalizeUserInfo
 } from '@/utils/auth'
@@ -16,7 +17,8 @@ export const useUserStore = defineStore('user', () => {
   const isLoggedIn = computed(() => !!normalizeUserInfo(userInfo.value))
 
   function setUser(info) {
-    const user = saveAuthSession(info)
+    // 资料局部更新只写 userInfo，避免 saveAuthSession 在失败时清掉 token
+    const user = saveUserInfo(info)
     userInfo.value = user
     return user
   }

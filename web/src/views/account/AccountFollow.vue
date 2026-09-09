@@ -48,7 +48,7 @@
 import { ref, watch, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { uhomeApi } from '@/api'
-import { getResourceUrl } from '@/utils/format'
+import { getAvatarUrl } from '@/utils/format'
 
 const route = useRoute()
 const router = useRouter()
@@ -78,7 +78,7 @@ function rowKey(item) {
 }
 
 function avatarOf(item) {
-  return getResourceUrl(item?.otherAvatar) || 'https://i0.hdslb.com/bfs/face/member/face/placeholder.jpg'
+  return getAvatarUrl(item?.otherAvatar)
 }
 
 function parsePage(payload) {

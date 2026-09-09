@@ -89,8 +89,22 @@ export const messageApi = {
 
 export const uhomeApi = {
   getUserInfo: (userId) => request.get('/uhome/getUserInfo', { params: { userId } }),
-  loadVideoList: (data) => request.post('/uhome/loadVideoList', data),
-  loadUserCollection: (data) => request.post('/uhome/loadUserCollection', data),
+  loadVideoList: (params) => request.get('/uhome/loadVideoList', { params }),
+  loadVideoCollection: (params) => request.get('/uhome/loadVideoCollection', { params }),
+  /** @deprecated 使用 loadVideoCollection */
+  loadUserCollection: (params) => {
+    if (params instanceof FormData) {
+      const userId = params.get('userId')
+      const pageNo = params.get('pageNo')
+      return request.get('/uhome/loadVideoCollection', {
+        params: {
+          ...(userId ? { userId } : {}),
+          ...(pageNo ? { pageNo } : {})
+        }
+      })
+    }
+    return request.get('/uhome/loadVideoCollection', { params })
+  },
   updateUserInfo: (data) => request.post('/uhome/updateUserInfo', data),
   focus: (focusUserId) => {
     const data = new FormData()
@@ -111,15 +125,21 @@ export const uhomeApi = {
     data.append('theme', String(theme))
     return request.post('/uhome/saveTheme', data)
   },
-  loadVideoSeries: (data) => request.post('/uhome/series/loadVideoSeries', data),
-  loadAllVideo: (data) => request.post('/uhome/series/loadAllVideo', data),
-  changeVideoSeriesSort: (data) => request.post('/uhome/series/changeVideoSeriesSort', data),
-  getVideoSeriesDetail: (data) => request.post('/series/getVideoSeriesDetail', data),
-  delVideoSeries: (data) => request.post('/uhome/series/delVideoSeries', data),
-  saveVideoSeries: (data) => request.post('/uhome/series/saveVideoSeries', data),
-  saveSeriesVideo: (data) => request.post('/uhome/series/saveSeriesVideo', data),
-  delSeriesVideo: (data) => request.post('/uhome/series/delSeriesVideo', data),
-  loadVideoSeriesWithVideo: (data) => request.post('/uhome/series/loadVideoSeriesWithVideo', data)
+  loadVideoSeries: (userId) =>
+    request.get('/uhome/series/loadVideoSeries', { params: { userId } }),
+  loadAllVideo: (seriesId) => {
+    const data = new FormData()
+    if (seriesId != null && seriesId !== '') data.append('seriesId', String(seriesId))
+    return request.post('/uhome/series/loadAllVideo', data)
+  },
+  saveVideoSeries: ({ seriesId, seriesName, seriesDescription, videoIds }) => {
+    const data = new FormData()
+    if (seriesId != null && seriesId !== '') data.append('seriesId', String(seriesId))
+    data.append('seriesName', seriesName)
+    if (seriesDescription != null) data.append('seriesDescription', seriesDescription)
+    if (videoIds) data.append('videoIds', videoIds)
+    return request.post('/uhome/series/saveVideoSeries', data)
+  }
 }
 
 export const ucenterApi = {

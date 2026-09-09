@@ -27,7 +27,7 @@
           class="uploader"
           @click.stop
         >
-          <img v-if="video.userAvatar" :src="getResourceUrl(video.userAvatar)" class="avatar" />
+          <img :src="getAvatarUrl(video.userAvatar)" class="avatar" />
           <span>{{ video.nickName || 'UP主' }}</span>
         </router-link>
         <span v-else class="uploader">{{ video.nickName || 'UP主' }}</span>
@@ -38,7 +38,7 @@
 
 <script setup>
 import { computed } from 'vue'
-import { formatCount, formatDuration, getResourceUrl, pickField } from '@/utils/format'
+import { formatCount, formatDuration, getResourceUrl, getAvatarUrl, pickField } from '@/utils/format'
 
 const props = defineProps({
   video: {

@@ -99,7 +99,7 @@
         <aside class="sidebar">
           <div class="uploader-card">
             <router-link :to="`/user/${videoInfo.userId}`" class="uploader-info">
-              <img :src="getResourceUrl(videoInfo.userAvatar || videoInfo.avatar)" class="avatar" alt="" />
+              <img :src="getAvatarUrl(videoInfo.userAvatar || videoInfo.avatar)" class="avatar" alt="" />
               <div>
                 <p class="nickname">{{ videoInfo.nickName }}</p>
                 <p class="intro">{{ videoInfo.personIntroduction || '这个人很懒，什么都没写' }}</p>
@@ -186,7 +186,7 @@ import CommentSection from '@/components/video/CommentSection.vue'
 import LoginDialog from '@/components/auth/LoginDialog.vue'
 import { useUserStore } from '@/stores'
 import { videoApi, fileApi, danmuApi, userActionApi, uhomeApi } from '@/api'
-import { formatCount, formatTime, formatDuration, getResourceUrl, unwrapVideoInfo, applyUserActionList, getDeviceId, normalizeVideoList, USER_ACTION_TYPE } from '@/utils/format'
+import { formatCount, formatTime, formatDuration, getResourceUrl, getAvatarUrl, unwrapVideoInfo, applyUserActionList, getDeviceId, normalizeVideoList, USER_ACTION_TYPE } from '@/utils/format'
 import { clearAuthSession } from '@/utils/auth'
 import { fetchRelatedVideos } from '@/utils/videoList'
 import { addWatchHistory, setCollected, toggleLike as toggleLocalLike, toggleCollect as toggleLocalCollect, addCoin as addLocalCoin } from '@/utils/localInteract'

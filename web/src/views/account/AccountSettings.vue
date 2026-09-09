@@ -7,6 +7,7 @@
           <img :src="avatarPreview" class="avatar-preview" alt="" />
           <input type="file" accept="image/*" @change="onAvatarChange" />
         </div>
+        <p class="field-tip">选择图片后会立即上传并保存头像，不会改动昵称</p>
       </div>
       <div class="form-item">
         <label>昵称</label>
@@ -66,13 +67,14 @@
 import { ref, reactive, computed, onMounted } from 'vue'
 import { useUserStore } from '@/stores'
 import { uhomeApi, fileApi } from '@/api'
-import { getResourceUrl, USER_THEME_PRESETS } from '@/utils/format'
+import { getAvatarUrl, USER_THEME_PRESETS } from '@/utils/format'
 
 const userStore = useUserStore()
 const saving = ref(false)
 const msg = ref('')
 const isError = ref(false)
 const avatarPath = ref('')
+const originalNickName = ref('')
 const theme = ref(1)
 const themeMsg = ref('')
 const themeSaving = ref(false)
@@ -86,21 +88,56 @@ const form = reactive({
   noticeInfo: ''
 })
 
-const avatarPreview = computed(() => {
-  return getResourceUrl(avatarPath.value || userStore.userInfo?.avatar)
-    || 'https://i0.hdslb.com/bfs/face/member/face/placeholder.jpg'
-})
+const avatarPreview = computed(() =>
+  getAvatarUrl(avatarPath.value || userStore.userInfo?.avatar)
+)
 
 function fillForm(info) {
   if (!info) return
-  form.nickName = info.nickName || ''
+  const nick = sanitizeFormText(info.nickName)
+  form.nickName = nick
+  originalNickName.value = nick
   form.sex = String(info.sex ?? 2)
-  form.birthday = info.birthday || ''
-  form.school = info.school || ''
-  form.personIntroduction = info.personIntroduction || ''
-  form.noticeInfo = info.noticeInfo || ''
-  avatarPath.value = info.avatar || ''
+  form.birthday = sanitizeFormText(info.birthday)
+  form.school = sanitizeFormText(info.school)
+  form.personIntroduction = sanitizeFormText(info.personIntroduction)
+  form.noticeInfo = sanitizeFormText(info.noticeInfo)
+  avatarPath.value = sanitizeFormText(info.avatar)
   theme.value = Number(info.theme) || 1
+}
+
+function sanitizeFormText(value) {
+  if (value == null) return ''
+  const s = String(value).trim()
+  if (!s || s === 'null' || s === 'undefined') return ''
+  return s
+}
+
+function buildUpdateFormData({ nickName, avatar }) {
+  const safeNick = sanitizeFormText(nickName)
+  const safeAvatar = sanitizeFormText(avatar)
+  if (!safeNick) throw new Error('昵称不能为空')
+  if (!safeAvatar) throw new Error('头像不能为空')
+
+  const data = new FormData()
+  data.append('nickName', safeNick)
+  data.append('avatar', safeAvatar)
+  data.append('sex', String(form.sex ?? 2))
+  data.append('birthday', sanitizeFormText(form.birthday))
+  data.append('school', sanitizeFormText(form.school))
+  data.append('personIntroduction', sanitizeFormText(form.personIntroduction))
+  data.append('noticeInfo', sanitizeFormText(form.noticeInfo))
+  return data
+}
+
+/** 未主动改昵称时，沿用加载时的原昵称，避免误触发改名扣币 */
+function resolveNickNameForSave() {
+  const typed = sanitizeFormText(form.nickName)
+  const original = sanitizeFormText(originalNickName.value)
+  const fromStore = sanitizeFormText(userStore.userInfo?.nickName)
+  if (!typed) return original || fromStore
+  if (typed === original) return original || typed
+  return typed
 }
 
 async function loadInfo() {
@@ -136,12 +173,53 @@ async function selectTheme(id) {
 async function onAvatarChange(e) {
   const file = e.target.files?.[0]
   if (!file) return
+  msg.value = ''
+  isError.value = false
   try {
     const res = await fileApi.uploadImage(file, true)
-    avatarPath.value = res.data || ''
+    const path = typeof res?.data === 'string' ? res.data : ''
+    if (!path) throw new Error('上传成功但未返回头像路径')
+
+    const nickName = resolveNickNameForSave()
+    if (!nickName) throw new Error('昵称未加载，请刷新页面后再改头像')
+
+    avatarPath.value = path
+    // 改头像立即保存，明确带上原昵称，避免只改头像却触发改名逻辑
+    await uhomeApi.updateUserInfo(buildUpdateFormData({ nickName, avatar: path }))
+    userStore.setUser({
+      ...userStore.userInfo,
+      nickName,
+      avatar: path,
+      sex: Number(form.sex)
+    })
+    form.nickName = nickName
+    originalNickName.value = nickName
+    // 再拉一次完整资料，避免本地与库不一致
+    try {
+      const refreshed = await uhomeApi.getUserInfo(userStore.userInfo.userId)
+      if (refreshed?.data) {
+        fillForm(refreshed.data)
+        const nextAvatar = sanitizeFormText(refreshed.data.avatar) || path
+        const nextNick = sanitizeFormText(refreshed.data.nickName) || nickName
+        avatarPath.value = nextAvatar
+        form.nickName = nextNick
+        originalNickName.value = nextNick
+        userStore.setUser({
+          ...userStore.userInfo,
+          ...refreshed.data,
+          avatar: nextAvatar,
+          nickName: nextNick
+        })
+      }
+    } catch {
+      /* 刷新失败不影响头像已保存 */
+    }
+    msg.value = '头像已更新'
   } catch (err) {
-    msg.value = err.message || '头像上传失败'
+    msg.value = err?.message || '头像上传失败'
     isError.value = true
+  } finally {
+    e.target.value = ''
   }
 }
 
@@ -150,17 +228,31 @@ async function handleSave() {
   msg.value = ''
   isError.value = false
   try {
-    const data = new FormData()
-    Object.entries(form).forEach(([k, v]) => data.append(k, v))
-    if (avatarPath.value) data.append('avatar', avatarPath.value)
-    await uhomeApi.updateUserInfo(data)
-    const updated = {
-      ...userStore.userInfo,
-      ...form,
-      sex: Number(form.sex),
-      avatar: avatarPath.value || userStore.userInfo?.avatar
+    const nickName = resolveNickNameForSave()
+    const avatar = sanitizeFormText(avatarPath.value || userStore.userInfo?.avatar)
+    if (!nickName) throw new Error('昵称不能为空')
+    if (!avatar) throw new Error('请先上传头像')
+
+    const nickChanged = nickName !== sanitizeFormText(originalNickName.value)
+    if (nickChanged) {
+      const ok = confirm('修改昵称会消耗 5 硬币，确定继续？')
+      if (!ok) return
     }
-    userStore.setUser(updated)
+
+    await uhomeApi.updateUserInfo(buildUpdateFormData({ nickName, avatar }))
+    originalNickName.value = nickName
+    form.nickName = nickName
+    avatarPath.value = avatar
+    userStore.setUser({
+      ...userStore.userInfo,
+      nickName,
+      sex: Number(form.sex),
+      birthday: sanitizeFormText(form.birthday),
+      school: sanitizeFormText(form.school),
+      personIntroduction: sanitizeFormText(form.personIntroduction),
+      noticeInfo: sanitizeFormText(form.noticeInfo),
+      avatar
+    })
     msg.value = '保存成功'
   } catch (e) {
     msg.value = e.message || '保存失败'
@@ -186,6 +278,12 @@ onMounted(loadInfo)
   display: flex;
   align-items: center;
   gap: 12px;
+}
+
+.field-tip {
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--bili-text-tertiary);
 }
 
 .avatar-preview {

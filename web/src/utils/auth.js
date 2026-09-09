@@ -25,6 +25,15 @@ export function clearAuthSession() {
   clearToken()
 }
 
+function pickNonEmpty(...values) {
+  for (const v of values) {
+    if (v == null) continue
+    const s = String(v).trim()
+    if (s && s !== 'null' && s !== 'undefined') return s
+  }
+  return ''
+}
+
 /** 保存 login / autoLogin 返回的 TokenUserInfoDto */
 export function saveAuthSession(data) {
   if (!data || typeof data !== 'object') {
@@ -41,24 +50,56 @@ export function saveAuthSession(data) {
   return null
 }
 
+/**
+ * 兼容 TokenUserInfoDto：顶层 nickName/avatar + 嵌套 userInfo
+ * 改头像后 Redis 常只更新顶层字段，必须合并两边
+ */
 export function normalizeUserInfo(data) {
-  if (!data) return null
+  if (!data || typeof data !== 'object') return null
 
-  // 兼容 { userInfo: {...} } 嵌套结构
-  if (data.userInfo && typeof data.userInfo === 'object') {
-    return normalizeUserInfo(data.userInfo)
-  }
+  const nested =
+    data.userInfo && typeof data.userInfo === 'object' && !Array.isArray(data.userInfo)
+      ? data.userInfo
+      : null
 
-  const userId = data.userId ?? data.user_id ?? data.id
-  if (userId == null || userId === '') return null
+  const source = nested ? { ...nested, ...data } : data
+  const userId = pickNonEmpty(
+    source.userId,
+    source.user_id,
+    source.id,
+    nested?.userId,
+    nested?.user_id,
+    data.userId,
+    data.user_id
+  )
+  if (!userId) return null
 
+  const nickName = pickNonEmpty(
+    data.nickName,
+    data.nick_name,
+    data.nickname,
+    nested?.nickName,
+    nested?.nick_name,
+    nested?.nickname,
+    source.nickName
+  )
+  const avatar = pickNonEmpty(
+    data.avatar,
+    data.userAvatar,
+    data.avatarUrl,
+    nested?.avatar,
+    nested?.userAvatar,
+    source.avatar
+  )
+
+  const { userInfo: _ignoreNested, token: _ignoreToken, ...rest } = source
   return {
-    ...data,
+    ...rest,
     userId: String(userId),
-    nickName: data.nickName ?? data.nick_name ?? data.nickname ?? '',
-    avatar: data.avatar ?? data.userAvatar ?? data.avatarUrl ?? '',
-    email: data.email ?? '',
-    currentCoin: Number(data.currentCoin ?? data.current_coin ?? 0) || 0
+    nickName,
+    avatar,
+    email: pickNonEmpty(source.email, nested?.email, data.email),
+    currentCoin: Number(source.currentCoin ?? source.current_coin ?? nested?.currentCoin ?? 0) || 0
   }
 }
 

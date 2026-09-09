@@ -25,7 +25,7 @@
               <strong>{{ formatCount(userInfo?.fansCount) }}</strong> 粉丝
             </button>
             <span v-else><strong>{{ formatCount(userInfo?.fansCount) }}</strong> 粉丝</span>
-            <span><strong>{{ formatCount(videoList.length) }}</strong> 投稿</span>
+            <span><strong>{{ formatCount(videoTotal) }}</strong> 投稿</span>
           </div>
         </div>
         <button
@@ -40,56 +40,173 @@
 
     <div class="container user-content">
       <div class="tab-bar">
-        <button class="tab" :class="{ active: tab === 'video' }" @click="tab = 'video'">投稿</button>
-        <button class="tab" :class="{ active: tab === 'collection' }" @click="tab = 'collection'">收藏</button>
+        <button class="tab" :class="{ active: tab === 'video' }" @click="switchTab('video')">投稿</button>
+        <button class="tab" :class="{ active: tab === 'collection' }" @click="switchTab('collection')">收藏</button>
+        <button class="tab" :class="{ active: tab === 'series' }" @click="switchTab('series')">合集</button>
       </div>
 
-      <div v-if="loading" class="loading-spinner">加载中</div>
-      <div v-else-if="displayList.length" class="video-grid">
-        <VideoCard v-for="video in displayList" :key="video.videoId" :video="video" />
+      <div v-if="tab === 'video'" class="toolbar">
+        <div class="order-tabs">
+          <button
+            v-for="item in orderOptions"
+            :key="item.value"
+            type="button"
+            class="order-btn"
+            :class="{ active: orderType === item.value }"
+            @click="changeOrder(item.value)"
+          >
+            {{ item.label }}
+          </button>
+        </div>
       </div>
-      <div v-else class="empty-state">{{ tab === 'video' ? '暂无投稿' : '暂无公开收藏' }}</div>
+
+      <div v-if="tab === 'series' && isSelf" class="toolbar">
+        <button type="button" class="btn-primary create-btn" @click="openCreateSeries">新建合集</button>
+      </div>
+
+      <div v-if="listLoading && !hasCurrentList" class="loading-spinner">加载中</div>
+
+      <template v-else-if="tab === 'series'">
+        <div v-if="seriesList.length" class="series-grid">
+          <div v-for="item in seriesList" :key="item.seriesId" class="series-card">
+            <div class="series-cover">合集</div>
+            <div class="series-body">
+              <h3 class="series-name">{{ item.seriesName || '未命名合集' }}</h3>
+              <p class="series-desc">{{ item.seriesDescription || '暂无简介' }}</p>
+            </div>
+          </div>
+        </div>
+        <div v-else class="empty-state">暂无合集</div>
+      </template>
+
+      <template v-else>
+        <div v-if="displayList.length" class="video-grid">
+          <VideoCard v-for="video in displayList" :key="video.videoId" :video="video" />
+        </div>
+        <div v-else class="empty-state">
+          {{ tab === 'video' ? '暂无投稿' : '暂无公开收藏' }}
+        </div>
+        <div v-if="hasMore" class="load-more">
+          <button type="button" class="btn-outline" :disabled="listLoading" @click="loadMore">
+            {{ listLoading ? '加载中...' : '加载更多' }}
+          </button>
+        </div>
+      </template>
+    </div>
+
+    <div v-if="showSeriesModal" class="modal-mask" @click.self="closeCreateSeries">
+      <div class="modal-card">
+        <h3>新建合集</h3>
+        <div class="form-item">
+          <label>名称</label>
+          <input v-model="seriesForm.name" type="text" maxlength="100" placeholder="合集名称" />
+        </div>
+        <div class="form-item">
+          <label>简介</label>
+          <textarea v-model="seriesForm.desc" rows="3" maxlength="200" placeholder="可选" />
+        </div>
+        <div class="form-item">
+          <label>选择视频（至少 1 个）</label>
+          <div v-if="pickLoading" class="field-tip">加载可选视频...</div>
+          <div v-else-if="pickVideos.length" class="pick-list">
+            <label v-for="v in pickVideos" :key="v.videoId" class="pick-item">
+              <input v-model="seriesForm.videoIds" type="checkbox" :value="v.videoId" />
+              <span :title="v.videoName">{{ v.videoName || v.videoId }}</span>
+            </label>
+          </div>
+          <p v-else class="field-tip">暂无可加入合集的投稿</p>
+        </div>
+        <p v-if="seriesError" class="error-tip">{{ seriesError }}</p>
+        <div class="modal-actions">
+          <button type="button" class="btn-outline" :disabled="seriesSaving" @click="closeCreateSeries">取消</button>
+          <button type="button" class="btn-primary" :disabled="seriesSaving" @click="submitCreateSeries">
+            {{ seriesSaving ? '创建中...' : '创建' }}
+          </button>
+        </div>
+      </div>
     </div>
   </div>
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, watch, reactive } from 'vue'
 import { useRoute } from 'vue-router'
 import VideoCard from '@/components/video/VideoCard.vue'
 import { useUserStore } from '@/stores'
 import { uhomeApi } from '@/api'
-import { formatCount, getResourceUrl, normalizeVideoList, getUserThemeGradient } from '@/utils/format'
-import { fetchPublicVideoPages } from '@/utils/videoList'
+import {
+  formatCount,
+  getAvatarUrl,
+  unwrapPagination,
+  getUserThemeGradient
+} from '@/utils/format'
 
 const route = useRoute()
 const userStore = useUserStore()
 const userId = computed(() => String(route.params.userId || ''))
 
+const orderOptions = [
+  { value: 0, label: '最新发布' },
+  { value: 1, label: '最多播放' },
+  { value: 2, label: '最多点赞' }
+]
+
 const userInfo = ref(null)
 const videoList = ref([])
 const collectionList = ref([])
-const loading = ref(true)
+const seriesList = ref([])
+const videoTotal = ref(0)
+const videoPageNo = ref(1)
+const videoPageTotal = ref(1)
+const collectionPageNo = ref(1)
+const collectionPageTotal = ref(1)
+const orderType = ref(0)
+const tab = ref('video')
+const profileLoading = ref(true)
+const listLoading = ref(false)
 const followed = ref(false)
 const following = ref(false)
-const tab = ref('video')
+const videoLoaded = ref(false)
+const collectionLoaded = ref(false)
+const seriesLoaded = ref(false)
+
+const showSeriesModal = ref(false)
+const seriesSaving = ref(false)
+const pickLoading = ref(false)
+const pickVideos = ref([])
+const seriesError = ref('')
+const seriesForm = reactive({
+  name: '',
+  desc: '',
+  videoIds: []
+})
 
 const displayName = computed(() => userInfo.value?.nickName || videoList.value[0]?.nickName || '用户')
-const avatarUrl = computed(() => {
-  return getResourceUrl(userInfo.value?.avatar || videoList.value[0]?.userAvatar)
-    || 'https://i0.hdslb.com/bfs/face/member/face/placeholder.jpg'
-})
+const avatarUrl = computed(() =>
+  getAvatarUrl(userInfo.value?.avatar || videoList.value[0]?.userAvatar)
+)
 const bannerStyle = computed(() => ({
   background: getUserThemeGradient(userInfo.value?.theme)
 }))
-const isSelf = computed(() => userStore.userInfo?.userId && String(userStore.userInfo.userId) === userId.value)
-const showFollowBtn = computed(() => {
-  return userStore.isLoggedIn && !isSelf.value
+const isSelf = computed(
+  () => userStore.userInfo?.userId && String(userStore.userInfo.userId) === userId.value
+)
+const showFollowBtn = computed(() => userStore.isLoggedIn && !isSelf.value)
+const displayList = computed(() =>
+  tab.value === 'video' ? videoList.value : collectionList.value
+)
+const hasCurrentList = computed(() => {
+  if (tab.value === 'series') return seriesList.value.length > 0
+  return displayList.value.length > 0
 })
-const displayList = computed(() => (tab.value === 'video' ? videoList.value : collectionList.value))
+const hasMore = computed(() => {
+  if (tab.value === 'video') return videoPageNo.value < videoPageTotal.value
+  if (tab.value === 'collection') return collectionPageNo.value < collectionPageTotal.value
+  return false
+})
 
-async function loadUser() {
-  loading.value = true
+async function loadProfile() {
+  profileLoading.value = true
   try {
     const res = await uhomeApi.getUserInfo(userId.value)
     userInfo.value = res.data || {}
@@ -97,35 +214,122 @@ async function loadUser() {
   } catch {
     userInfo.value = null
     followed.value = false
-  }
-
-  try {
-    const videoRes = await uhomeApi.loadVideoList({ userId: userId.value, pageNo: 1 })
-    videoList.value = normalizeVideoList(videoRes.data)
-    if (!videoList.value.length) {
-      const all = await fetchPublicVideoPages(8)
-      videoList.value = all.filter((item) => String(item.userId) === userId.value)
-    }
-  } catch {
-    try {
-      const all = await fetchPublicVideoPages(8)
-      videoList.value = all.filter((item) => String(item.userId) === userId.value)
-    } catch {
-      videoList.value = []
-    }
-  }
-
-  try {
-    const data = new FormData()
-    data.append('userId', userId.value)
-    data.append('pageNo', '1')
-    const colRes = await uhomeApi.loadUserCollection(data)
-    collectionList.value = normalizeVideoList(colRes.data)
-  } catch {
-    collectionList.value = []
   } finally {
-    loading.value = false
+    profileLoading.value = false
   }
+}
+
+async function loadVideos(reset = false) {
+  if (!userId.value || listLoading.value) return
+  listLoading.value = true
+  if (reset) {
+    videoPageNo.value = 1
+    videoList.value = []
+  }
+  try {
+    const res = await uhomeApi.loadVideoList({
+      userId: userId.value,
+      pageNo: videoPageNo.value,
+      orderType: orderType.value
+    })
+    const page = unwrapPagination(res.data)
+    videoList.value = reset ? page.list : [...videoList.value, ...page.list]
+    videoPageNo.value = page.pageNo
+    videoPageTotal.value = page.pageTotal
+    videoTotal.value = page.totalCount
+    videoLoaded.value = true
+  } catch {
+    if (reset) {
+      videoList.value = []
+      videoTotal.value = 0
+      videoPageTotal.value = 1
+    }
+  } finally {
+    listLoading.value = false
+  }
+}
+
+async function loadCollections(reset = false) {
+  if (!userId.value || listLoading.value) return
+  listLoading.value = true
+  if (reset) {
+    collectionPageNo.value = 1
+    collectionList.value = []
+  }
+  try {
+    const res = await uhomeApi.loadVideoCollection({
+      userId: userId.value,
+      pageNo: collectionPageNo.value
+    })
+    const page = unwrapPagination(res.data)
+    collectionList.value = reset ? page.list : [...collectionList.value, ...page.list]
+    collectionPageNo.value = page.pageNo
+    collectionPageTotal.value = page.pageTotal
+    collectionLoaded.value = true
+  } catch {
+    if (reset) collectionList.value = []
+  } finally {
+    listLoading.value = false
+  }
+}
+
+async function loadSeries() {
+  if (!userId.value || listLoading.value) return
+  listLoading.value = true
+  try {
+    const res = await uhomeApi.loadVideoSeries(userId.value)
+    const raw = res.data
+    seriesList.value = Array.isArray(raw) ? raw : raw?.list || []
+    seriesLoaded.value = true
+  } catch {
+    seriesList.value = []
+  } finally {
+    listLoading.value = false
+  }
+}
+
+async function ensureTabData(reset = false) {
+  if (tab.value === 'video') {
+    if (reset || !videoLoaded.value) await loadVideos(true)
+  } else if (tab.value === 'collection') {
+    if (reset || !collectionLoaded.value) await loadCollections(true)
+  } else if (tab.value === 'series') {
+    if (reset || !seriesLoaded.value) await loadSeries()
+  }
+}
+
+async function switchTab(next) {
+  if (tab.value === next) return
+  tab.value = next
+  await ensureTabData(false)
+}
+
+async function changeOrder(value) {
+  if (orderType.value === value) return
+  orderType.value = value
+  await loadVideos(true)
+}
+
+async function loadMore() {
+  if (listLoading.value || !hasMore.value) return
+  if (tab.value === 'video') {
+    videoPageNo.value += 1
+    await loadVideos(false)
+  } else if (tab.value === 'collection') {
+    collectionPageNo.value += 1
+    await loadCollections(false)
+  }
+}
+
+async function reloadAll() {
+  videoLoaded.value = false
+  collectionLoaded.value = false
+  seriesLoaded.value = false
+  videoList.value = []
+  collectionList.value = []
+  seriesList.value = []
+  await loadProfile()
+  await ensureTabData(true)
 }
 
 async function toggleFollow() {
@@ -152,8 +356,64 @@ async function toggleFollow() {
   }
 }
 
-watch(userId, loadUser)
-onMounted(loadUser)
+async function openCreateSeries() {
+  seriesError.value = ''
+  seriesForm.name = ''
+  seriesForm.desc = ''
+  seriesForm.videoIds = []
+  showSeriesModal.value = true
+  pickLoading.value = true
+  try {
+    const res = await uhomeApi.loadAllVideo()
+    pickVideos.value = unwrapPagination(res.data).list
+  } catch (e) {
+    pickVideos.value = []
+    seriesError.value = e?.message || '加载视频失败'
+  } finally {
+    pickLoading.value = false
+  }
+}
+
+function closeCreateSeries() {
+  if (seriesSaving.value) return
+  showSeriesModal.value = false
+}
+
+async function submitCreateSeries() {
+  const name = String(seriesForm.name || '').trim()
+  if (!name) {
+    seriesError.value = '请填写合集名称'
+    return
+  }
+  if (!seriesForm.videoIds.length) {
+    seriesError.value = '请至少选择 1 个视频'
+    return
+  }
+  seriesSaving.value = true
+  seriesError.value = ''
+  try {
+    await uhomeApi.saveVideoSeries({
+      seriesName: name,
+      seriesDescription: String(seriesForm.desc || '').trim(),
+      videoIds: seriesForm.videoIds.join(',')
+    })
+    showSeriesModal.value = false
+    seriesLoaded.value = false
+    await loadSeries()
+  } catch (e) {
+    seriesError.value = e?.message || '创建失败'
+  } finally {
+    seriesSaving.value = false
+  }
+}
+
+watch(userId, () => {
+  tab.value = 'video'
+  orderType.value = 0
+  reloadAll()
+})
+
+onMounted(reloadAll)
 </script>
 
 <style scoped lang="scss">
@@ -222,7 +482,7 @@ onMounted(loadUser)
 .tab-bar {
   display: flex;
   gap: 24px;
-  margin-bottom: 20px;
+  margin-bottom: 16px;
   border-bottom: 1px solid var(--bili-border);
   padding-bottom: 12px;
 }
@@ -240,15 +500,182 @@ onMounted(loadUser)
   }
 }
 
+.toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.order-tabs {
+  display: flex;
+  gap: 8px;
+}
+
+.order-btn {
+  padding: 6px 12px;
+  border-radius: 4px;
+  font-size: 13px;
+  color: var(--bili-text-secondary);
+  background: #f4f4f4;
+
+  &.active {
+    color: #fff;
+    background: var(--bili-pink);
+  }
+}
+
+.create-btn {
+  margin-left: auto;
+}
+
 .video-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
   gap: 20px 16px;
 }
 
+.series-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 16px;
+}
+
+.series-card {
+  background: #fff;
+  border-radius: var(--bili-radius);
+  overflow: hidden;
+  box-shadow: var(--bili-shadow);
+}
+
+.series-cover {
+  height: 100px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, rgba(251, 114, 153, 0.85), rgba(251, 114, 153, 0.45));
+  color: #fff;
+  font-weight: 600;
+  letter-spacing: 2px;
+}
+
+.series-body {
+  padding: 12px 14px;
+}
+
+.series-name {
+  font-size: 15px;
+  font-weight: 600;
+  margin-bottom: 6px;
+  color: var(--bili-text);
+}
+
+.series-desc {
+  font-size: 12px;
+  color: var(--bili-text-tertiary);
+  line-height: 1.5;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
 .empty-state {
   text-align: center;
   padding: 60px;
   color: var(--bili-text-tertiary);
+}
+
+.load-more {
+  display: flex;
+  justify-content: center;
+  margin: 24px 0 8px;
+}
+
+.modal-mask {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+
+.modal-card {
+  width: min(480px, 100%);
+  max-height: 80vh;
+  overflow: auto;
+  background: #fff;
+  border-radius: 12px;
+  padding: 20px 20px 16px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.16);
+
+  h3 {
+    margin-bottom: 16px;
+    font-size: 18px;
+  }
+}
+
+.form-item {
+  margin-bottom: 14px;
+
+  label {
+    display: block;
+    margin-bottom: 6px;
+    font-size: 13px;
+    color: var(--bili-text-secondary);
+  }
+
+  input[type='text'],
+  textarea {
+    width: 100%;
+    border: 1px solid var(--bili-border);
+    border-radius: 6px;
+    padding: 8px 10px;
+    font-size: 14px;
+  }
+}
+
+.pick-list {
+  max-height: 200px;
+  overflow: auto;
+  border: 1px solid var(--bili-border);
+  border-radius: 6px;
+  padding: 8px;
+}
+
+.pick-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 4px;
+  font-size: 13px;
+  cursor: pointer;
+
+  span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
+
+.field-tip,
+.error-tip {
+  font-size: 12px;
+  color: var(--bili-text-tertiary);
+}
+
+.error-tip {
+  color: #f56c6c;
+  margin-bottom: 8px;
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 8px;
 }
 </style>

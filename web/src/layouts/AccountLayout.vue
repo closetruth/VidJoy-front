@@ -33,15 +33,12 @@
 import { computed } from 'vue'
 import { useRoute } from 'vue-router'
 import { useUserStore } from '@/stores'
-import { getResourceUrl } from '@/utils/format'
+import { getAvatarUrl } from '@/utils/format'
 
 const route = useRoute()
 const userStore = useUserStore()
 
-const avatarUrl = computed(() => {
-  const avatar = userStore.userInfo?.avatar
-  return avatar ? getResourceUrl(avatar) : 'https://i0.hdslb.com/bfs/face/member/face/placeholder.jpg'
-})
+const avatarUrl = computed(() => getAvatarUrl(userStore.userInfo?.avatar))
 
 const menuItems = computed(() => [
   { path: '/account/home', title: '概览', icon: '🏠' },

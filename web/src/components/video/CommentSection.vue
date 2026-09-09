@@ -34,7 +34,7 @@
     <div v-if="loading && !comments.length" class="loading-spinner">加载中</div>
     <ul v-else-if="comments.length" class="comment-list">
       <li v-for="comment in comments" :key="comment.commentId" class="comment-item">
-        <img :src="getResourceUrl(comment.avatar)" class="avatar" alt="" />
+        <img :src="getAvatarUrl(comment.avatar)" class="avatar" alt="" />
         <div class="comment-body">
           <div class="comment-user">
             <span class="nickname">{{ comment.nickName }}</span>
@@ -105,7 +105,7 @@
 
           <ul v-if="comment.children?.length" class="reply-list">
             <li v-for="reply in comment.children" :key="reply.commentId" class="reply-item">
-              <img :src="getResourceUrl(reply.avatar)" class="avatar small" alt="" />
+              <img :src="getAvatarUrl(reply.avatar)" class="avatar small" alt="" />
               <div>
                 <span class="nickname">{{ reply.nickName }}</span>
                 <span v-if="getReplyLabel(reply)" class="reply-to"> 回复 @{{ getReplyLabel(reply) }}</span>
@@ -160,7 +160,7 @@
 import { ref, computed, watch, onMounted } from 'vue'
 import { useUserStore } from '@/stores'
 import { commentApi, userActionApi } from '@/api'
-import { formatCount, formatTime, getResourceUrl, USER_ACTION_TYPE } from '@/utils/format'
+import { formatCount, formatTime, getAvatarUrl, USER_ACTION_TYPE } from '@/utils/format'
 
 const PAGE_SIZE = 15
 
@@ -196,10 +196,7 @@ const loadError = ref('')
 const topping = ref(false)
 const deleting = ref(false)
 
-const avatarUrl = computed(() => {
-  const avatar = userStore.userInfo?.avatar
-  return avatar ? getResourceUrl(avatar) : ''
-})
+const avatarUrl = computed(() => getAvatarUrl(userStore.userInfo?.avatar))
 
 /** 仅视频 UP 主可置顶 */
 const canTop = computed(() => {
