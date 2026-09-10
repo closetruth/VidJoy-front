@@ -34,6 +34,24 @@
             {{ formatCount(video.playCount) }} 播放 · {{ formatDate(video.createTime) }}
           </p>
           <div class="actions">
+            <label class="interact-check">
+              <input
+                type="checkbox"
+                :checked="isCommentClosed(video)"
+                :disabled="interactionSavingId === video.videoId"
+                @change="toggleInteraction(video, '0', $event.target.checked)"
+              />
+              关闭评论
+            </label>
+            <label class="interact-check">
+              <input
+                type="checkbox"
+                :checked="isDanmuClosed(video)"
+                :disabled="interactionSavingId === video.videoId"
+                @change="toggleInteraction(video, '1', $event.target.checked)"
+              />
+              关闭弹幕
+            </label>
             <button
               v-if="canEditVideo(video.status)"
               type="button"
@@ -79,6 +97,7 @@ const hasMore = ref(true)
 const status = ref('')
 const keyword = ref('')
 const counts = reactive({})
+const interactionSavingId = ref('')
 
 const statusTabs = [
   { value: '', label: '全部', countKey: 'allCount' },
@@ -128,6 +147,46 @@ async function deleteVideo(video) {
     loadCounts()
   } catch (e) {
     errorMsg.value = e?.message || '删除失败'
+  }
+}
+
+function interactionFlags(video) {
+  return String(video?.interaction || '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean)
+}
+
+function isCommentClosed(video) {
+  return interactionFlags(video).includes('0')
+}
+
+function isDanmuClosed(video) {
+  return interactionFlags(video).includes('1')
+}
+
+function buildInteraction(video, flag, enabled) {
+  const set = new Set(interactionFlags(video))
+  if (enabled) set.add(flag)
+  else set.delete(flag)
+  // 与 Upload 一致：有弹幕关闭则含 1，有评论关闭则含 0
+  return ['1', '0'].filter((f) => set.has(f)).join(',')
+}
+
+async function toggleInteraction(video, flag, enabled) {
+  if (!video?.videoId || interactionSavingId.value) return
+  const next = buildInteraction(video, flag, enabled)
+  const prev = video.interaction ?? ''
+  video.interaction = next
+  interactionSavingId.value = video.videoId
+  errorMsg.value = ''
+  try {
+    await ucenterApi.saveVideoInteraction(video.videoId, next)
+  } catch (e) {
+    video.interaction = prev
+    errorMsg.value = e?.message || '更新互动设置失败'
+  } finally {
+    interactionSavingId.value = ''
   }
 }
 
@@ -314,6 +373,21 @@ onMounted(() => {
   display: flex;
   gap: 8px;
   flex-wrap: wrap;
+  align-items: center;
+}
+
+.interact-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 13px;
+  color: var(--bili-text-secondary);
+  cursor: pointer;
+  user-select: none;
+
+  input:disabled {
+    cursor: not-allowed;
+  }
 }
 
 .action-btn {
