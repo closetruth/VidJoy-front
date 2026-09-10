@@ -127,6 +127,10 @@ export const uhomeApi = {
   },
   loadVideoSeries: (userId) =>
     request.get('/uhome/series/loadVideoSeries', { params: { userId } }),
+  loadVideoSeriesWithVideo: (userId) =>
+    request.get('/uhome/series/loadVideoSeriesWithVideo', { params: { userId } }),
+  getVideoSeriesDetail: (seriesId) =>
+    request.get('/uhome/series/getVideoSeriesDetail', { params: { seriesId } }),
   loadAllVideo: (seriesId) => {
     const data = new FormData()
     if (seriesId != null && seriesId !== '') data.append('seriesId', String(seriesId))
@@ -139,6 +143,25 @@ export const uhomeApi = {
     if (seriesDescription != null) data.append('seriesDescription', seriesDescription)
     if (videoIds) data.append('videoIds', videoIds)
     return request.post('/uhome/series/saveVideoSeries', data)
+  },
+  // 后端路径拼写为 delServiesVideo；seriesName 为接口校验必填
+  delServiesVideo: ({ seriesId, videoIds, seriesName }) => {
+    const data = new FormData()
+    data.append('seriesId', String(seriesId))
+    data.append('seriesName', seriesName || '-')
+    if (videoIds) data.append('videoIds', String(videoIds))
+    return request.post('/uhome/series/delServiesVideo', data)
+  },
+  delVideoSeries: ({ seriesId, seriesName }) => {
+    const data = new FormData()
+    data.append('seriesId', String(seriesId))
+    data.append('seriesName', seriesName || '-')
+    return request.post('/uhome/series/delVideoSeries', data)
+  },
+  changeVideoSeriesSort: (seriesIds) => {
+    const data = new FormData()
+    data.append('seriesIds', Array.isArray(seriesIds) ? seriesIds.join(',') : String(seriesIds))
+    return request.post('/uhome/series/changeVideoSeriesSort', data)
   }
 }
 
