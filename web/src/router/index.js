@@ -37,6 +37,7 @@ const routes = [
     children: [
       { path: 'home', name: 'AccountHome', component: () => import('@/views/account/AccountHome.vue'), meta: { ...authMeta, title: '个人中心' } },
       { path: 'videos', name: 'AccountVideos', component: () => import('@/views/account/AccountVideos.vue'), meta: { ...authMeta, title: '我的投稿' } },
+      { path: 'interact', name: 'AccountInteract', component: () => import('@/views/account/AccountInteract.vue'), meta: { ...authMeta, title: '互动管理' } },
       { path: 'collection', name: 'AccountCollection', component: () => import('@/views/account/AccountCollection.vue'), meta: { ...authMeta, title: '我的收藏' } },
       { path: 'follow', name: 'AccountFollow', component: () => import('@/views/account/AccountFollow.vue'), meta: { ...authMeta, title: '关注与粉丝' } },
       { path: 'history', name: 'AccountHistory', component: () => import('@/views/History.vue'), meta: { ...authMeta, title: '历史记录' } },

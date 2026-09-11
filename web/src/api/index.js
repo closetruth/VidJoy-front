@@ -181,6 +181,29 @@ export const ucenterApi = {
     const data = new FormData()
     data.append('videoId', videoId)
     return request.post('/ucenter/deleteVideo', data)
+  },
+  loadAllVideo: () => request.post('/ucenter/loadAllVideo'),
+  loadComment: ({ pageNo, videoId } = {}) => {
+    const data = new FormData()
+    if (pageNo != null) data.append('pageNo', String(pageNo))
+    if (videoId) data.append('videoId', String(videoId))
+    return request.post('/ucenter/loadComment', data)
+  },
+  delComment: (commentId) => {
+    const data = new FormData()
+    data.append('commentId', String(commentId))
+    return request.post('/ucenter/delComment', data)
+  },
+  loadDanmu: ({ pageNo, videoId } = {}) => {
+    const data = new FormData()
+    if (pageNo != null) data.append('pageNo', String(pageNo))
+    if (videoId) data.append('videoId', String(videoId))
+    return request.post('/ucenter/loadDanmu', data)
+  },
+  delDanmu: (danmuId) => {
+    const data = new FormData()
+    data.append('danmuId', String(danmuId))
+    return request.post('/ucenter/delDanmu', data)
   }
 }
 
