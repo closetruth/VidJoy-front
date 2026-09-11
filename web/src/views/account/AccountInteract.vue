@@ -22,7 +22,39 @@
 
     <ul v-else-if="list.length" class="item-list">
       <li v-for="item in list" :key="rowKey(item)" class="item-row">
+        <img
+          v-if="tab === 'comment'"
+          class="avatar"
+          :src="getAvatarUrl(item.avatar)"
+          alt=""
+        />
         <div class="item-main">
+          <p class="party-line">
+            <router-link
+              v-if="senderUserId(item)"
+              :to="`/user/${senderUserId(item)}`"
+              class="party-link"
+            >
+              {{ senderName(item) }}
+            </router-link>
+            <span v-else>{{ senderName(item) }}</span>
+            <span class="arrow">→</span>
+            <router-link
+              v-if="tab === 'comment' && replyUserId(item)"
+              :to="`/user/${replyUserId(item)}`"
+              class="party-link"
+            >
+              {{ receiverLabel(item) }}
+            </router-link>
+            <router-link
+              v-else-if="item.videoId"
+              :to="`/video/${item.videoId}`"
+              class="party-link"
+            >
+              {{ receiverLabel(item) }}
+            </router-link>
+            <span v-else>{{ receiverLabel(item) }}</span>
+          </p>
           <p class="content">{{ displayContent(item) }}</p>
           <p class="meta">
             <router-link
@@ -32,9 +64,7 @@
             >
               {{ displayVideoName(item) }}
             </router-link>
-            <span v-else>未知稿件</span>
             <span>· {{ formatDate(item.postTime) }}</span>
-            <span v-if="tab === 'comment' && item.nickName">· {{ item.nickName }}</span>
           </p>
         </div>
         <button
@@ -60,7 +90,7 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import { ucenterApi } from '@/api'
-import { formatDate, pickField } from '@/utils/format'
+import { formatDate, pickField, getAvatarUrl } from '@/utils/format'
 
 const tab = ref('comment')
 const list = ref([])
@@ -77,6 +107,10 @@ function rowKey(item) {
   return `d-${item.danmuId}`
 }
 
+function itemId(item) {
+  return tab.value === 'comment' ? item?.commentId : item?.danmuId
+}
+
 function displayContent(item) {
   if (tab.value === 'comment') return item.content || ''
   return item.text || ''
@@ -90,22 +124,54 @@ function displayVideoName(item) {
   )
 }
 
+function shortUser(userId) {
+  if (!userId) return '用户'
+  const s = String(userId)
+  return `用户${s.slice(-4)}`
+}
+
+function senderUserId(item) {
+  return item?.userId ? String(item.userId) : ''
+}
+
+function senderName(item) {
+  return (
+    pickField(item, 'nickName', 'nick_name') ||
+    shortUser(item?.userId)
+  )
+}
+
+function replyUserId(item) {
+  if (tab.value !== 'comment') return ''
+  return item?.replyUserId ? String(item.replyUserId) : ''
+}
+
+function receiverLabel(item) {
+  if (tab.value === 'comment') {
+    if (item?.replyNickName || item?.replyUserId) {
+      return item.replyNickName || shortUser(item.replyUserId)
+    }
+    return `稿件（${displayVideoName(item)}）`
+  }
+  return `稿件（${displayVideoName(item)}）`
+}
+
 function parsePage(payload) {
   if (Array.isArray(payload)) {
-    return { list: payload, pageNo: 1, pageTotal: 1 }
+    return { list: payload, pageTotal: 1 }
   }
   if (!payload || typeof payload !== 'object') {
-    return { list: [], pageNo: 1, pageTotal: 1 }
+    return { list: [], pageTotal: 1 }
   }
   const rows = Array.isArray(payload.list)
     ? payload.list
     : Array.isArray(payload.records)
       ? payload.records
       : []
+  const pageTotal = Number(payload.pageTotal)
   return {
     list: rows,
-    pageNo: Number(payload.pageNo ?? 1) || 1,
-    pageTotal: Number(payload.pageTotal ?? 1) || 1
+    pageTotal: Number.isFinite(pageTotal) && pageTotal > 0 ? pageTotal : null
   }
 }
 
@@ -125,11 +191,13 @@ async function loadList(reset = false) {
   if (reset) {
     pageNo.value = 1
     list.value = []
+    hasMore.value = false
   }
   errorMsg.value = ''
+  const requestPage = pageNo.value
   try {
     const params = {
-      pageNo: pageNo.value,
+      pageNo: requestPage,
       ...(filterVideoId.value ? { videoId: filterVideoId.value } : {})
     }
     const res =
@@ -137,9 +205,27 @@ async function loadList(reset = false) {
         ? await ucenterApi.loadComment(params)
         : await ucenterApi.loadDanmu(params)
     const page = parsePage(res.data)
-    list.value = reset ? page.list : [...list.value, ...page.list]
-    pageNo.value = page.pageNo
-    hasMore.value = page.pageNo < page.pageTotal
+    const existing = new Set(list.value.map((row) => String(itemId(row))))
+    const fresh = page.list.filter((row) => {
+      const id = itemId(row)
+      if (id == null || id === '') return false
+      return !existing.has(String(id))
+    })
+
+    if (reset) {
+      list.value = fresh.length ? fresh : page.list
+    } else {
+      list.value = [...list.value, ...fresh]
+    }
+
+    // 不以响应 pageNo 覆盖本地页码；空页或无新增则停止
+    if (page.list.length === 0 || (!reset && fresh.length === 0)) {
+      hasMore.value = false
+    } else if (page.pageTotal != null) {
+      hasMore.value = requestPage < page.pageTotal
+    } else {
+      hasMore.value = page.list.length > 0
+    }
   } catch (e) {
     if (reset) list.value = []
     hasMore.value = false
@@ -247,9 +333,42 @@ onMounted(async () => {
   box-shadow: var(--bili-shadow);
 }
 
+.avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+  background: #eee;
+}
+
 .item-main {
   flex: 1;
   min-width: 0;
+}
+
+.party-line {
+  font-size: 13px;
+  color: var(--bili-text-secondary);
+  margin-bottom: 6px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+}
+
+.party-link {
+  color: var(--bili-pink);
+  font-weight: 500;
+
+  &:hover {
+    text-decoration: underline;
+  }
+}
+
+.arrow {
+  color: var(--bili-text-tertiary);
+  margin: 0 2px;
 }
 
 .content {
