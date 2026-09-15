@@ -21,9 +21,23 @@ export const videoApi = {
   /** 在线人数心跳：后端 @RequestMapping，GET 传 videoId + deviceId */
   reportVideoPlayOnline: (videoId, deviceId) =>
     request.get('/video/reportVideoPlayOnline', { params: { videoId, deviceId } }),
-  search: (data) => request.post('/video/search', data),
+  /** ES 搜索：keyword 必填；orderType 0最新/1最多播放/2最多点赞；pageNo 默认 1，每页 30 */
+  search: ({ keyword, orderType, pageNo } = {}) => {
+    const data = new FormData()
+    data.append('keyword', keyword)
+    if (orderType != null && orderType !== '') data.append('orderType', String(orderType))
+    if (pageNo != null) data.append('pageNo', String(pageNo))
+    return request.post('/video/search', data)
+  },
+  /** 后端尚未实现热词记录（search 内 TODO），失败时由调用方回退本地词 */
   getSearchKeywordTop: () => request.post('/video/getSearchKeywordTop'),
-  getVideoRecommend: (videoId) => request.post('/video/getVideoRecommend', null, { params: { videoId } }),
+  /** 相关推荐：用当前视频 tags（或标题）作 keyword，排除自身 videoId */
+  getVideoRecommend: (keyword, videoId) => {
+    const data = new FormData()
+    data.append('keyword', keyword)
+    data.append('videoId', videoId)
+    return request.post('/video/getVideoRecommend', data)
+  },
   loadHotVideoList: () => request.post('/video/loadHotVideoList')
 }
 

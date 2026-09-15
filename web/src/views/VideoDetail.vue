@@ -302,7 +302,11 @@ async function loadVideo() {
     loadDanmu()
 
     try {
-      const rec = await videoApi.getVideoRecommend(videoId.value)
+      // 后端 getVideoRecommend 用 keyword（标签）做 ES 相似检索，videoId 用于排除自身
+      const tags = String(videoInfo.value.tags || '').trim()
+      const recommendKeyword = tags || String(videoInfo.value.videoName || '').trim()
+      if (!recommendKeyword) throw new Error('no keyword')
+      const rec = await videoApi.getVideoRecommend(recommendKeyword, videoId.value)
       const list = normalizeVideoList(rec.data)
       recommendList.value = list.length
         ? list.filter((item) => item.videoId !== videoId.value)

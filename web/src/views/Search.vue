@@ -5,9 +5,27 @@
       <span class="result-count" v-if="!loading">共 {{ totalCount }} 个结果</span>
     </div>
 
+    <div v-if="keyword" class="order-tabs">
+      <button
+        v-for="item in orderOptions"
+        :key="item.value"
+        type="button"
+        class="order-tab"
+        :class="{ active: orderType === item.value }"
+        @click="changeOrder(item.value)"
+      >
+        {{ item.label }}
+      </button>
+    </div>
+
     <div v-if="loading" class="loading-spinner">搜索中</div>
     <div v-else-if="videoList.length" class="video-grid">
-      <VideoCard v-for="video in videoList" :key="video.videoId" :video="video" />
+      <VideoCard
+        v-for="video in videoList"
+        :key="video.videoId"
+        :video="video"
+        highlight
+      />
     </div>
     <div v-else class="empty-state">
       <p>没有找到相关视频</p>
@@ -25,8 +43,15 @@ import { ref, computed, watch, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import VideoCard from '@/components/video/VideoCard.vue'
 import { videoApi } from '@/api'
-import { normalizeVideoList } from '@/utils/format'
+import { unwrapPagination } from '@/utils/format'
 import { fetchPublicVideoPages } from '@/utils/videoList'
+
+/** 与后端 SearchOrderTypeEnum 一致 */
+const orderOptions = [
+  { value: 0, label: '最新发布' },
+  { value: 1, label: '最多播放' },
+  { value: 2, label: '最多点赞' }
+]
 
 const route = useRoute()
 const keyword = computed(() => String(route.query.keyword || '').trim())
@@ -35,6 +60,7 @@ const loading = ref(false)
 const pageNo = ref(1)
 const totalCount = ref(0)
 const hasMore = ref(false)
+const orderType = ref(0)
 
 function matchKeyword(video, kw) {
   const text = [video.videoName, video.nickName, video.tags, video.introduction]
@@ -64,16 +90,16 @@ async function search(reset = false) {
   if (reset) pageNo.value = 1
 
   try {
-    const data = new FormData()
-    data.append('keyword', keyword.value)
-    data.append('pageNo', String(pageNo.value))
-    const res = await videoApi.search(data)
-    const payload = res.data || {}
-    const list = normalizeVideoList(payload)
-    totalCount.value = payload.totalCount ?? list.length
-    videoList.value = reset ? list : [...videoList.value, ...list]
-    hasMore.value = list.length >= 20
-    if (reset && !list.length) await searchByLocal()
+    const res = await videoApi.search({
+      keyword: keyword.value,
+      orderType: orderType.value,
+      pageNo: pageNo.value
+    })
+    const page = unwrapPagination(res.data)
+    totalCount.value = page.totalCount
+    videoList.value = reset ? page.list : [...videoList.value, ...page.list]
+    hasMore.value = page.pageNo < page.pageTotal
+    if (reset && !page.list.length) await searchByLocal()
   } catch {
     if (reset) await searchByLocal()
   } finally {
@@ -81,12 +107,21 @@ async function search(reset = false) {
   }
 }
 
+function changeOrder(type) {
+  if (orderType.value === type) return
+  orderType.value = type
+  search(true)
+}
+
 function loadMore() {
   pageNo.value++
   search()
 }
 
-watch(keyword, () => search(true))
+watch(keyword, () => {
+  orderType.value = 0
+  search(true)
+})
 onMounted(() => search(true))
 </script>
 
@@ -99,7 +134,7 @@ onMounted(() => search(true))
   display: flex;
   align-items: baseline;
   gap: 12px;
-  margin-bottom: 24px;
+  margin-bottom: 16px;
 
   h1 {
     font-size: 20px;
@@ -109,6 +144,33 @@ onMounted(() => search(true))
   .result-count {
     font-size: 14px;
     color: var(--bili-text-tertiary);
+  }
+}
+
+.order-tabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 20px;
+}
+
+.order-tab {
+  padding: 6px 14px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--bili-text-secondary);
+  font-size: 13px;
+  cursor: pointer;
+  transition: color 0.15s, background 0.15s;
+
+  &:hover {
+    color: var(--bili-pink);
+  }
+
+  &.active {
+    color: var(--bili-pink);
+    background: rgba(251, 114, 153, 0.1);
+    font-weight: 600;
   }
 }
 

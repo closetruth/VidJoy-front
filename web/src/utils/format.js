@@ -116,6 +116,25 @@ export function normalizeVideoList(payload) {
   return list.map(normalizeVideoItem)
 }
 
+/** 去掉 HTML 标签（搜索高亮标题的纯文本） */
+export function stripHtml(html) {
+  return String(html ?? '').replace(/<[^>]*>/g, '')
+}
+
+/**
+ * ES 搜索高亮：先整体转义，再只还原后端的 &lt;span class='highlight'&gt;
+ */
+export function formatHighlightTitle(html) {
+  const escaped = String(html ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+  return escaped
+    .replace(/&lt;span class=['"]highlight['"]&gt;/g, '<span class="highlight">')
+    .replace(/&lt;\/span&gt;/g, '</span>')
+}
+
 /** 分页结果拆包 */
 export function unwrapPagination(payload) {
   if (Array.isArray(payload)) {

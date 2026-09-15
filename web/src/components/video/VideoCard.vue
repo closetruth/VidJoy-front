@@ -19,7 +19,13 @@
       </div>
     </div>
     <div class="card-info">
-      <h3 class="video-title" :title="video.videoName">{{ video.videoName }}</h3>
+      <h3
+        v-if="highlight"
+        class="video-title"
+        :title="plainTitle"
+        v-html="titleHtml"
+      ></h3>
+      <h3 v-else class="video-title" :title="plainTitle">{{ plainTitle }}</h3>
       <div class="video-meta">
         <router-link
           v-if="video.userId"
@@ -38,14 +44,33 @@
 
 <script setup>
 import { computed } from 'vue'
-import { formatCount, formatDuration, getResourceUrl, getAvatarUrl, pickField } from '@/utils/format'
+import {
+  formatCount,
+  formatDuration,
+  getResourceUrl,
+  getAvatarUrl,
+  pickField,
+  stripHtml,
+  formatHighlightTitle
+} from '@/utils/format'
 
 const props = defineProps({
   video: {
     type: Object,
     required: true
+  },
+  /** 搜索页：展示 ES 返回的 videoName 高亮 HTML */
+  highlight: {
+    type: Boolean,
+    default: false
   }
 })
+
+const rawTitle = computed(
+  () => pickField(props.video, 'videoName', 'video_name') || props.video.videoName || ''
+)
+const plainTitle = computed(() => stripHtml(rawTitle.value))
+const titleHtml = computed(() => formatHighlightTitle(rawTitle.value))
 
 const coverUrl = computed(() => {
   const cover = pickField(props.video, 'videoCover', 'video_cover')
@@ -133,6 +158,12 @@ const coverUrl = computed(() => {
 
   .video-card:hover & {
     color: var(--bili-pink);
+  }
+
+  :deep(.highlight) {
+    color: var(--bili-pink);
+    font-style: normal;
+    font-weight: 600;
   }
 }
 
