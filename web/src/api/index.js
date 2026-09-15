@@ -99,9 +99,22 @@ export const historyApi = {
 export const messageApi = {
   getNoReadCount: () => request.post('/message/getNoReadCount'),
   getNoReadCountGroup: () => request.post('/message/getNoReadCountGroup'),
-  loadMessage: () => request.post('/message/loadMessage'),
-  readAll: () => request.post('/message/readAll'),
-  delMessage: (messageId) => request.post('/message/delMessage', { messageId })
+  /** messageType 可选，与 MessageTypeEnum 一致：0赞 1藏 2币 3评 4弹幕 5评赞 6回复 7系统 */
+  loadMessage: (messageType) => {
+    const data = new FormData()
+    if (messageType != null && messageType !== '') data.append('messageType', String(messageType))
+    return request.post('/message/loadMessage', data)
+  },
+  readAll: (messageType) => {
+    const data = new FormData()
+    if (messageType != null && messageType !== '') data.append('messageType', String(messageType))
+    return request.post('/message/readAll', data)
+  },
+  delMessage: (messageId) => {
+    const data = new FormData()
+    data.append('messageId', String(messageId))
+    return request.post('/message/delMessage', data)
+  }
 }
 
 export const uhomeApi = {
