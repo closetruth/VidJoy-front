@@ -51,7 +51,7 @@ import {
   getAvatarUrl,
   pickField,
   stripHtml,
-  formatHighlightTitle
+  highlightKeyword
 } from '@/utils/format'
 
 const props = defineProps({
@@ -59,10 +59,14 @@ const props = defineProps({
     type: Object,
     required: true
   },
-  /** 搜索页：展示 ES 返回的 videoName 高亮 HTML */
+  /** 搜索页：按关键词高亮标题 */
   highlight: {
     type: Boolean,
     default: false
+  },
+  keyword: {
+    type: String,
+    default: ''
   }
 })
 
@@ -70,7 +74,7 @@ const rawTitle = computed(
   () => pickField(props.video, 'videoName', 'video_name') || props.video.videoName || ''
 )
 const plainTitle = computed(() => stripHtml(rawTitle.value))
-const titleHtml = computed(() => formatHighlightTitle(rawTitle.value))
+const titleHtml = computed(() => highlightKeyword(plainTitle.value, props.keyword))
 
 const coverUrl = computed(() => {
   const cover = pickField(props.video, 'videoCover', 'video_cover')
@@ -162,6 +166,7 @@ const coverUrl = computed(() => {
 
   :deep(.highlight) {
     color: var(--bili-pink);
+    background: rgba(251, 114, 153, 0.15);
     font-style: normal;
     font-weight: 600;
   }

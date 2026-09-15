@@ -25,6 +25,7 @@
         :key="video.videoId"
         :video="video"
         highlight
+        :keyword="keyword"
       />
     </div>
     <div v-else class="empty-state">

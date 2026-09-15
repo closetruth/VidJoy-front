@@ -121,15 +121,46 @@ export function stripHtml(html) {
   return String(html ?? '').replace(/<[^>]*>/g, '')
 }
 
-/**
- * ES 搜索高亮：先整体转义，再只还原后端的 &lt;span class='highlight'&gt;
- */
-export function formatHighlightTitle(html) {
-  const escaped = String(html ?? '')
+function escapeHtml(text) {
+  return String(text ?? '')
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
+}
+
+function escapeRegExp(text) {
+  return String(text ?? '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+/**
+ * 按关键词高亮标题（不依赖 ES 是否返回 span）
+ * 先去标签再 escape，再包裹匹配片段。
+ */
+export function highlightKeyword(text, keyword) {
+  const plain = stripHtml(text)
+  const kw = String(keyword ?? '').trim()
+  if (!kw) return escapeHtml(plain)
+  const re = new RegExp(escapeRegExp(kw), 'gi')
+  let result = ''
+  let last = 0
+  let match
+  while ((match = re.exec(plain)) !== null) {
+    result += escapeHtml(plain.slice(last, match.index))
+    result += `<span class="highlight">${escapeHtml(match[0])}</span>`
+    last = match.index + match[0].length
+    if (match[0].length === 0) re.lastIndex++
+  }
+  result += escapeHtml(plain.slice(last))
+  return result
+}
+
+/**
+ * ES 搜索高亮：先整体转义，再只还原后端的 &lt;span class='highlight'&gt;
+ * 搜索页优先用 highlightKeyword；此函数保留兼容。
+ */
+export function formatHighlightTitle(html) {
+  const escaped = escapeHtml(html)
   return escaped
     .replace(/&lt;span class=['"]highlight['"]&gt;/g, '<span class="highlight">')
     .replace(/&lt;\/span&gt;/g, '</span>')
