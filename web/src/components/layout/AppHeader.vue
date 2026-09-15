@@ -16,7 +16,7 @@
             type="text"
             placeholder="搜索视频、UP主"
             class="search-input"
-            @focus="showSuggest = true"
+            @focus="onSearchFocus"
           />
           <button type="submit" class="search-btn" aria-label="搜索">
             <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
@@ -95,14 +95,40 @@ import { videoApi } from '@/api'
 
 defineEmits(['open-login'])
 
+const FALLBACK_HOT = ['编程', '游戏', '动漫', '音乐', '科技']
+
 const router = useRouter()
 const userStore = useUserStore()
 const keyword = ref('')
 const showSuggest = ref(false)
 const hotKeywords = ref([])
 const isScrolled = ref(false)
+let hotLoading = false
 
 const avatarUrl = computed(() => getAvatarUrl(userStore.userInfo?.avatar))
+
+function normalizeHotList(data) {
+  const list = Array.isArray(data) ? data : []
+  return list
+    .map((item) => (typeof item === 'string' ? item : item?.keyword || item?.word || ''))
+    .map((s) => String(s).trim())
+    .filter(Boolean)
+}
+
+async function loadHotKeywords() {
+  if (hotLoading) return
+  hotLoading = true
+  try {
+    const res = await videoApi.getSearchKeywordTop()
+    const words = normalizeHotList(res.data)
+    // Redis 尚无统计时为空，用本地词占位；有数据则以接口为准
+    hotKeywords.value = words.length ? words : FALLBACK_HOT
+  } catch {
+    if (!hotKeywords.value.length) hotKeywords.value = FALLBACK_HOT
+  } finally {
+    hotLoading = false
+  }
+}
 
 function handleSearch() {
   if (!keyword.value.trim()) return
@@ -123,15 +149,14 @@ function onScroll() {
   isScrolled.value = window.scrollY > 10
 }
 
+function onSearchFocus() {
+  showSuggest.value = true
+  loadHotKeywords()
+}
+
 onMounted(async () => {
   window.addEventListener('scroll', onScroll)
-  try {
-    const res = await videoApi.getSearchKeywordTop()
-    const list = res.data || []
-    hotKeywords.value = (Array.isArray(list) ? list : []).map((item) => item.keyword || item).filter(Boolean)
-  } catch {
-    hotKeywords.value = ['编程', '游戏', '动漫', '音乐', '科技']
-  }
+  await loadHotKeywords()
 })
 
 onUnmounted(() => {

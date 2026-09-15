@@ -29,7 +29,10 @@ export const videoApi = {
     if (pageNo != null) data.append('pageNo', String(pageNo))
     return request.post('/video/search', data)
   },
-  /** 后端尚未实现热词记录（search 内 TODO），失败时由调用方回退本地词 */
+  /**
+   * 热搜 Top10：GET/POST /video/getSearchKeywordTop
+   * 返回 List&lt;String&gt;（Redis ZSet 按搜索次数倒序）
+   */
   getSearchKeywordTop: () => request.post('/video/getSearchKeywordTop'),
   /** 相关推荐：用当前视频 tags（或标题）作 keyword，排除自身 videoId */
   getVideoRecommend: (keyword, videoId) => {
