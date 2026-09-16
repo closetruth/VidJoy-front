@@ -91,8 +91,18 @@ export const userActionApi = {
 }
 
 export const historyApi = {
-  loadHistory: () => request.post('/history/loadHistory'),
-  delHistory: (videoId) => request.post('/history/delHistory', { videoId }),
+  /** 返回 PaginationResultVO，list 为 VideoPlayHistory（含 videoName/videoCover） */
+  loadHistory: (pageNo = 1) => {
+    const data = new FormData()
+    if (pageNo != null) data.append('pageNo', String(pageNo))
+    return request.post('/history/loadHistory', data)
+  },
+  /** 后端 delHistory(@NotEmpty String videoId) */
+  delHistory: (videoId) => {
+    const data = new FormData()
+    data.append('videoId', String(videoId))
+    return request.post('/history/delHistory', data)
+  },
   cleanHistory: () => request.post('/history/cleanHistory')
 }
 
@@ -275,5 +285,9 @@ export const fileApi = {
     data.append('createThumbnail', String(createThumbnail))
     return request.post('/file/uploadImage', data)
   },
-  videoPlaylistUrl: (fileId) => `/api/file/videoResource/${encodeURIComponent(fileId)}/index.m3u8`
+  // HLS playlist 必须带 /index.m3u8，否则相对 ts 会解析到 /videoResource/0000.ts 导致无法播放
+  videoPlaylistUrl: (fileId) =>
+    `/api/file/videoResource/${encodeURIComponent(fileId)}/index.m3u8`,
+  // 无后缀走 videoResource，后端才会入播放队列（playlist 走 Ts 接口不计播放）
+  videoPlayEnqueueUrl: (fileId) => `/api/file/videoResource/${encodeURIComponent(fileId)}`
 }

@@ -187,7 +187,7 @@ import LoginDialog from '@/components/auth/LoginDialog.vue'
 import { useUserStore } from '@/stores'
 import { videoApi, fileApi, danmuApi, userActionApi, uhomeApi } from '@/api'
 import { formatCount, formatTime, formatDuration, getResourceUrl, getAvatarUrl, unwrapVideoInfo, applyUserActionList, getDeviceId, normalizeVideoList, USER_ACTION_TYPE } from '@/utils/format'
-import { clearAuthSession } from '@/utils/auth'
+import { clearAuthSession, loadToken } from '@/utils/auth'
 import { fetchRelatedVideos } from '@/utils/videoList'
 import { addWatchHistory, setCollected, toggleLike as toggleLocalLike, toggleCollect as toggleLocalCollect, addCoin as addLocalCoin } from '@/utils/localInteract'
 import { isApiNotFoundError } from '@/utils/request'
@@ -296,7 +296,8 @@ async function loadVideo() {
     applyUserActionsFromPayload(payload)
     followed.value = Boolean(payload.haveFocus || videoInfo.value.haveFocus)
 
-    addWatchHistory(videoInfo.value)
+    // 登录用户由后端播放队列写入 video_play_history；未登录仍写本地
+    if (!userStore.isLoggedIn) addWatchHistory(videoInfo.value)
     await loadVideoPList()
     startOnlineReport()
     loadDanmu()
@@ -364,6 +365,19 @@ function switchEpisode(ep) {
   if (!ep?.fileId || currentFileId.value === ep.fileId) return
   currentFileId.value = ep.fileId
   loadDanmu()
+}
+
+/** 单独打 videoResource（无 ts），触发后端入播放队列；playlist 仍用 index.m3u8 保证相对路径可播 */
+function enqueueVideoPlay(fileId) {
+  if (!fileId || !userStore.isLoggedIn) return
+  const headers = {}
+  const token = loadToken()
+  if (token) headers.token = token
+  fetch(fileApi.videoPlayEnqueueUrl(fileId), {
+    method: 'GET',
+    credentials: 'include',
+    headers
+  }).catch(() => {})
 }
 
 function requireLogin() {
@@ -589,10 +603,14 @@ function shareVideo() {
 }
 
 watch(videoId, loadVideo)
+watch(currentFileId, (fileId) => {
+  if (fileId) enqueueVideoPlay(fileId)
+})
 watch(
   () => userStore.isLoggedIn,
   (loggedIn) => {
     if (loggedIn && videoInfo.value) refreshUserActions()
+    if (loggedIn && currentFileId.value) enqueueVideoPlay(currentFileId.value)
   }
 )
 onMounted(loadVideo)

@@ -14,39 +14,96 @@
       >
         <img :src="getResourceUrl(item.videoCover)" class="cover" alt="" />
         <div class="info">
-          <h3>{{ item.videoName }}</h3>
-          <p class="meta">{{ item.nickName }} · {{ formatTime(item.lastPlayTime) }}</p>
+          <h3>{{ item.videoName || '视频' }}</h3>
+          <p class="meta">
+            <span v-if="item.nickName">{{ item.nickName }} · </span>
+            {{ formatTime(item.lastPlayTime) }}
+          </p>
         </div>
         <button class="del-btn" @click.prevent="removeItem(item.videoId)">×</button>
       </router-link>
+      <button
+        v-if="pageNo < pageTotal"
+        class="btn-outline load-more"
+        :disabled="loadingMore"
+        @click="loadMore"
+      >
+        {{ loadingMore ? '加载中…' : '加载更多' }}
+      </button>
     </div>
-    <div v-else class="empty-state">暂无观看历史</div>
+    <div v-else class="empty-state">
+      {{ useLocal ? '暂无本地观看历史' : '暂无观看历史' }}
+    </div>
   </div>
 </template>
 
 <script setup>
 import { ref, onMounted } from 'vue'
 import { historyApi } from '@/api'
-import { formatTime, getResourceUrl, normalizeVideoList } from '@/utils/format'
+import {
+  formatTime,
+  getResourceUrl,
+  normalizeHistoryList,
+  unwrapPagination
+} from '@/utils/format'
 import { getWatchHistory, removeWatchHistory, clearWatchHistory } from '@/utils/localInteract'
+import { useUserStore } from '@/stores'
+import { isApiNotFoundError } from '@/utils/request'
 
+const userStore = useUserStore()
 const historyList = ref([])
 const loading = ref(true)
+const loadingMore = ref(false)
 const useLocal = ref(false)
+const pageNo = ref(1)
+const pageTotal = ref(1)
 
-async function loadHistory() {
-  loading.value = true
+function applyLocalList() {
+  useLocal.value = true
+  historyList.value = getWatchHistory()
+  pageNo.value = 1
+  pageTotal.value = 1
+}
+
+async function loadHistory(reset = true) {
+  if (reset) {
+    loading.value = true
+    pageNo.value = 1
+  } else {
+    loadingMore.value = true
+  }
+
   try {
-    const res = await historyApi.loadHistory()
-    const list = normalizeVideoList(res.data)
-    historyList.value = list.length ? list : getWatchHistory()
-    useLocal.value = !list.length
-  } catch {
-    useLocal.value = true
-    historyList.value = getWatchHistory()
+    await userStore.ensureAuth()
+    if (!userStore.isLoggedIn) {
+      applyLocalList()
+      return
+    }
+
+    const res = await historyApi.loadHistory(pageNo.value)
+    const page = unwrapPagination(res.data)
+    const list = normalizeHistoryList(page.list)
+    useLocal.value = false
+    historyList.value = reset ? list : [...historyList.value, ...list]
+    pageNo.value = page.pageNo
+    pageTotal.value = page.pageTotal
+  } catch (e) {
+    if (reset && (isApiNotFoundError(e) || e?.code === 901)) {
+      applyLocalList()
+    } else if (reset) {
+      historyList.value = []
+      useLocal.value = false
+    }
   } finally {
     loading.value = false
+    loadingMore.value = false
   }
+}
+
+async function loadMore() {
+  if (useLocal.value || loadingMore.value || pageNo.value >= pageTotal.value) return
+  pageNo.value += 1
+  await loadHistory(false)
 }
 
 async function removeItem(videoId) {
@@ -76,7 +133,7 @@ async function cleanAll() {
   historyList.value = []
 }
 
-onMounted(loadHistory)
+onMounted(() => loadHistory(true))
 </script>
 
 <style scoped lang="scss">
@@ -145,6 +202,11 @@ onMounted(loadHistory)
     background: #f6f7f8;
     color: var(--bili-pink);
   }
+}
+
+.load-more {
+  align-self: center;
+  margin-top: 8px;
 }
 
 .empty-state {

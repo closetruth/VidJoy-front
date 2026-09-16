@@ -26,6 +26,8 @@
             </button>
             <span v-else><strong>{{ formatCount(userInfo?.fansCount) }}</strong> 粉丝</span>
             <span><strong>{{ formatCount(videoTotal) }}</strong> 投稿</span>
+            <span><strong>{{ formatCount(userInfo?.playCount) }}</strong> 播放</span>
+            <span><strong>{{ formatCount(userInfo?.likeCount) }}</strong> 获赞</span>
           </div>
         </div>
         <button
@@ -341,8 +343,15 @@ async function loadProfile() {
   profileLoading.value = true
   try {
     const res = await uhomeApi.getUserInfo(userId.value)
-    userInfo.value = res.data || {}
-    followed.value = Boolean(res.data?.haveFocus)
+    const raw = res.data || {}
+    userInfo.value = {
+      ...raw,
+      playCount: Number(raw.playCount ?? raw.play_count ?? 0) || 0,
+      likeCount: Number(raw.likeCount ?? raw.like_count ?? 0) || 0,
+      fansCount: Number(raw.fansCount ?? raw.fans_count ?? 0) || 0,
+      focusCount: Number(raw.focusCount ?? raw.focus_count ?? 0) || 0
+    }
+    followed.value = Boolean(raw.haveFocus)
   } catch {
     userInfo.value = null
     followed.value = false

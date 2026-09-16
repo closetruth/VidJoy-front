@@ -35,6 +35,7 @@
 <script setup>
 import { ref, watch, onMounted, onUnmounted, computed } from 'vue'
 import Hls from 'hls.js'
+import { loadToken } from '@/utils/auth'
 
 const props = defineProps({
   src: String,
@@ -65,7 +66,10 @@ function initPlayer() {
     if (Hls.isSupported()) {
       hls = new Hls({
         xhrSetup(xhr) {
+          // 后端 videoResource 用 header/cookie 取 token 后才入播放队列；HLS 不会走 axios
           xhr.withCredentials = true
+          const token = loadToken()
+          if (token) xhr.setRequestHeader('token', token)
           xhr.overrideMimeType?.('application/vnd.apple.mpegurl')
         }
       })

@@ -166,6 +166,27 @@ export function formatHighlightTitle(html) {
     .replace(/&lt;\/span&gt;/g, '</span>')
 }
 
+/** 播放历史：后端 VideoPlayHistory + join video_info */
+export function normalizeHistoryItem(item) {
+  if (!item || typeof item !== 'object') return item
+  const lastPlayTime =
+    item.lastUpdateTime || item.last_update_time || item.lastPlayTime || item.createTime
+  return {
+    ...item,
+    videoId: pickField(item, 'videoId', 'video_id') || item.videoId,
+    videoName: pickField(item, 'videoName', 'video_name') || item.videoName || '',
+    videoCover: pickField(item, 'videoCover', 'video_cover') || item.videoCover || '',
+    nickName: pickField(item, 'nickName', 'nick_name') || item.nickName || '',
+    lastPlayTime
+  }
+}
+
+export function normalizeHistoryList(payload) {
+  if (Array.isArray(payload)) return payload.map(normalizeHistoryItem)
+  const list = payload?.list || payload?.records || []
+  return list.map(normalizeHistoryItem)
+}
+
 /** 分页结果拆包 */
 export function unwrapPagination(payload) {
   if (Array.isArray(payload)) {
