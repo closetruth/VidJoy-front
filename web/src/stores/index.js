@@ -73,13 +73,63 @@ export const useUserStore = defineStore('user', () => {
     }
   }
 
+  function countFromGroup(payload) {
+    if (!payload) return 0
+    if (Array.isArray(payload)) {
+      return payload.reduce((sum, item) => {
+        const c = Number(item.messageCount ?? item.count ?? item.noReadCount ?? 0)
+        return sum + (Number.isFinite(c) ? c : 0)
+      }, 0)
+    }
+    return Object.values(payload).reduce((sum, v) => sum + (Number(v) || 0), 0)
+  }
+
+  function unwrapMessageList(payload) {
+    if (Array.isArray(payload)) return payload
+    return payload?.list || payload?.records || payload?.data?.list || []
+  }
+
+  function isUnreadMessage(item) {
+    const flag = item?.readType ?? item?.recvType
+    return Number(flag) === 0 || flag == null
+  }
+
+  /** 后端未读按 recv_type=0；库里 recv_type 为 null 时接口会返回 0，需按列表回退 */
+  async function countUnreadFromLists() {
+    const types = [0, 1, 2, 3, 4, 5, 6, 7]
+    const lists = await Promise.all(
+      types.map(async (type) => {
+        try {
+          const res = await messageApi.loadMessage(type, 1)
+          return unwrapMessageList(res.data)
+        } catch {
+          return []
+        }
+      })
+    )
+    return lists.reduce((sum, list) => sum + list.filter(isUnreadMessage).length, 0)
+  }
+
   async function fetchNoReadCount() {
     try {
       const res = await messageApi.getNoReadCount()
-      const n = Number(res.data?.count ?? res.data ?? 0)
+      let n = Number(res.data ?? 0)
+      if (!Number.isFinite(n) || n <= 0) {
+        try {
+          const groupRes = await messageApi.getNoReadCountGroup()
+          n = countFromGroup(groupRes.data)
+        } catch {
+          n = 0
+        }
+      }
+      if (!n) n = await countUnreadFromLists()
       noReadCount.value = Number.isFinite(n) ? n : 0
     } catch {
-      noReadCount.value = 0
+      try {
+        noReadCount.value = await countUnreadFromLists()
+      } catch {
+        noReadCount.value = 0
+      }
     }
   }
 

@@ -98,16 +98,22 @@ export const historyApi = {
 
 export const messageApi = {
   getNoReadCount: () => request.post('/message/getNoReadCount'),
+  /** 返回 List&lt;UserMessageCountDto&gt; { messageType, messageCount } */
   getNoReadCountGroup: () => request.post('/message/getNoReadCountGroup'),
-  /** messageType 可选，与 MessageTypeEnum 一致：0赞 1藏 2币 3评 4弹幕 5评赞 6回复 7系统 */
-  loadMessage: (messageType) => {
+  /**
+   * 后端 loadMessage(@NotNull Integer messageType, Integer pageNo)
+   * messageType 必填，与 MessageTypeEnum 一致
+   */
+  loadMessage: (messageType, pageNo = 1) => {
     const data = new FormData()
-    if (messageType != null && messageType !== '') data.append('messageType', String(messageType))
+    data.append('messageType', String(messageType))
+    if (pageNo != null) data.append('pageNo', String(pageNo))
     return request.post('/message/loadMessage', data)
   },
+  /** 后端 readAll(@NotNull Integer messageType) */
   readAll: (messageType) => {
     const data = new FormData()
-    if (messageType != null && messageType !== '') data.append('messageType', String(messageType))
+    data.append('messageType', String(messageType))
     return request.post('/message/readAll', data)
   },
   delMessage: (messageId) => {

@@ -29,6 +29,15 @@
       </div>
     </section>
 
+    <section v-if="hotList.length" class="video-section container">
+      <div class="section-header">
+        <h2 class="section-title">热门视频</h2>
+      </div>
+      <div class="video-grid">
+        <VideoCard v-for="video in hotList" :key="video.videoId" :video="video" />
+      </div>
+    </section>
+
     <!-- 视频列表 -->
     <section class="video-section container">
       <div class="section-header">
@@ -65,6 +74,7 @@ import { videoApi } from '@/api'
 import { getResourceUrl, normalizeVideoList, buildLoadVideoParams } from '@/utils/format'
 
 const recommendList = ref([])
+const hotList = ref([])
 const videoList = ref([])
 const loading = ref(false)
 const pageNo = ref(1)
@@ -76,6 +86,15 @@ async function loadRecommend() {
     recommendList.value = normalizeVideoList(res.data)
   } catch {
     recommendList.value = []
+  }
+}
+
+async function loadHot() {
+  try {
+    const res = await videoApi.loadHotVideoList(1)
+    hotList.value = normalizeVideoList(res.data)
+  } catch {
+    hotList.value = []
   }
 }
 
@@ -120,6 +139,7 @@ function loadMore() {
 
 onMounted(() => {
   loadRecommend()
+  loadHot()
   loadVideos(true)
 })
 </script>
