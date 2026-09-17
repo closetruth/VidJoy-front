@@ -250,6 +250,14 @@ export const ucenterApi = {
     const data = new FormData()
     data.append('danmuId', String(danmuId))
     return request.post('/ucenter/delDanmu', data)
+  },
+  /** 实时总量 + 昨日分类型增量 preDayData；@RequestMapping 用表单参数 */
+  getActualTimeStatisticsInfo: () => request.post('/ucenter/getActualTimeStatisticsInfo'),
+  /** 近 7 日某类型日统计，dataType: 0播放 1粉丝 2点赞 3收藏 4投币 5评论 6弹幕 */
+  getWeekStatisticsInfo: (dataType) => {
+    const data = new FormData()
+    if (dataType != null) data.append('dataType', String(dataType))
+    return request.post('/ucenter/getWeekStatisticsInfo', data)
   }
 }
 

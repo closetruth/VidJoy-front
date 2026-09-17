@@ -16,14 +16,31 @@ export const categoryApi = {
 export const videoApi = {
   loadVideoList: (params) => request.get('/videoInfo/loadVideoList', { params }),
   auditVideo: (data) => request.post('/videoInfo/auditVideo', data),
-  deleteVideo: (videoId) => request.post('/videoInfo/deleteVideo', { videoId }),
-  recommendVideo: (videoId) => request.post('/videoInfo/recommendVideo', { videoId }),
-  loadVideoPList: (videoId) => request.post('/videoInfo/loadVideoPList', { videoId })
+  deleteVideo: (videoId) => {
+    const data = new FormData()
+    data.append('videoId', String(videoId))
+    return request.post('/videoInfo/deleteVideo', data)
+  },
+  recommendVideo: (videoId) => {
+    const data = new FormData()
+    data.append('videoId', String(videoId))
+    return request.post('/videoInfo/recommendVideo', data)
+  },
+  loadVideoPList: (videoId) => {
+    const data = new FormData()
+    data.append('videoId', String(videoId))
+    return request.post('/videoInfo/loadVideoPList', data)
+  }
 }
 
 export const indexApi = {
   getActualTimeStatisticsInfo: () => request.post('/index/getActualTimeStatisticsInfo'),
-  getWeekStatisticsInfo: () => request.post('/index/getWeekStatisticsInfo')
+  /** dataType: 0播放 1粉丝/用户 2点赞 3收藏 4投币 5评论 6弹幕 */
+  getWeekStatisticsInfo: (dataType) => {
+    const data = new FormData()
+    if (dataType != null) data.append('dataType', String(dataType))
+    return request.post('/index/getWeekStatisticsInfo', data)
+  }
 }
 
 export const settingApi = {
@@ -32,10 +49,26 @@ export const settingApi = {
 }
 
 export const interactApi = {
-  loadDanmu: (data) => request.post('/interact/loadDanmu', data),
-  delDanmu: (danmuId) => request.post('/interact/delDanmu', { danmuId }),
-  loadComment: (data) => request.post('/interact/loadComment', data),
-  delComment: (commentId) => request.post('/interact/delComment', { commentId })
+  loadDanmu: ({ pageNo } = {}) => {
+    const data = new FormData()
+    if (pageNo != null) data.append('pageNo', String(pageNo))
+    return request.post('/interact/loadDanmu', data)
+  },
+  delDanmu: (danmuId) => {
+    const data = new FormData()
+    data.append('danmuId', String(danmuId))
+    return request.post('/interact/delDanmu', data)
+  },
+  loadComment: ({ pageNo } = {}) => {
+    const data = new FormData()
+    if (pageNo != null) data.append('pageNo', String(pageNo))
+    return request.post('/interact/loadComment', data)
+  },
+  delComment: (commentId) => {
+    const data = new FormData()
+    data.append('commentId', String(commentId))
+    return request.post('/interact/delComment', data)
+  }
 }
 
 export const userApi = {

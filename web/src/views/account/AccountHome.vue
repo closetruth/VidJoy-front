@@ -24,6 +24,10 @@
         <span class="icon">📤</span>
         <span>投稿视频</span>
       </router-link>
+      <router-link to="/account/statistics" class="action-card">
+        <span class="icon">📊</span>
+        <span>数据中心</span>
+      </router-link>
       <router-link to="/account/videos" class="action-card">
         <span class="icon">🎬</span>
         <span>管理投稿</span>
@@ -134,7 +138,7 @@ onMounted(loadData)
 
 .quick-actions {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(5, 1fr);
   gap: 12px;
   margin-bottom: 24px;
 }
@@ -202,6 +206,12 @@ onMounted(loadData)
 
   a {
     color: var(--bili-pink);
+  }
+}
+
+@media (max-width: 1100px) {
+  .quick-actions {
+    grid-template-columns: repeat(3, 1fr);
   }
 }
 

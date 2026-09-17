@@ -50,6 +50,7 @@ import { formatDate } from '@/utils/format'
 const list = ref([])
 const loading = ref(false)
 const pageNo = ref(1)
+const pageTotal = ref(1)
 const hasMore = ref(true)
 const query = reactive({ videoNameFuzzy: '' })
 
@@ -67,22 +68,22 @@ async function loadList(reset = false) {
   if (reset) pageNo.value = 1
 
   try {
-    const data = new FormData()
-    data.append('pageNo', String(pageNo.value))
-    data.append('videoNameFuzzy', query.videoNameFuzzy)
-
-    const res = await interactApi.loadDanmu(data)
-    const items = res.data?.list || res.data || []
+    const res = await interactApi.loadDanmu({ pageNo: pageNo.value })
+    const payload = res.data || {}
+    const items = payload.list || (Array.isArray(payload) ? payload : [])
     list.value = reset ? items : [...list.value, ...items]
-    hasMore.value = items.length >= 20
+    pageTotal.value = payload.pageTotal || 1
+    hasMore.value = pageNo.value < pageTotal.value
   } catch {
     if (reset) list.value = []
+    hasMore.value = false
   } finally {
     loading.value = false
   }
 }
 
 function loadMore() {
+  if (!hasMore.value || loading.value) return
   pageNo.value++
   loadList()
 }

@@ -42,6 +42,7 @@ const avatarUrl = computed(() => getAvatarUrl(userStore.userInfo?.avatar))
 
 const menuItems = computed(() => [
   { path: '/account/home', title: '概览', icon: '🏠' },
+  { path: '/account/statistics', title: '数据中心', icon: '📊' },
   { path: '/account/videos', title: '我的投稿', icon: '🎬' },
   { path: '/account/interact', title: '互动管理', icon: '🛡' },
   { path: '/account/collection', title: '我的收藏', icon: '⭐' },
